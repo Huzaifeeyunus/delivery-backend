@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import prisma from "../lib/prisma";  
-import { log } from "console";
+import { log } from "console"; 
 //import { calculateShippingCost } from "../utils/shipping";
 //import { calculateDistanceKm, calculateShippingFee } from "../utils/shipping";
 //import haversine from "haversine-distance";
@@ -213,12 +213,12 @@ export const getAllCart = async (req: Request, res: Response) => {
     });
 
     // Process each cart like we did for a normal user
-    const processedCarts = carts.map((cart) => {
+    const processedCarts = carts.map((cart: any) => {
       let subtotal = 0;
       let shippingFee = 0;
       const warnings: string[] = [];
 
-      const items = cart.items.map((item) => {
+      const items = cart.items.map((item: any) => {
         const product = item.product;
         let finalQty = item.quantity;
         let isAdjusted = false;
@@ -325,7 +325,7 @@ export const getAllCart = async (req: Request, res: Response) => {
     // --- 4. Adjust stock + calculate totals (ALWAYS use variant) ---
     let subtotal = 0;
     const adjustedItems = await Promise.all(
-      cart.items.map(async (item) => {
+      cart.items.map(async (item: any) => {
         let isAdjusted = false;
 
         // ✅ Only variant is used
@@ -366,7 +366,7 @@ export const getAllCart = async (req: Request, res: Response) => {
       })
     );
 
-    const finalItems = adjustedItems.filter((i) => i !== null);
+    const finalItems = adjustedItems.filter((i: any) => i !== null);
     const total = subtotal + shippingCost;
 
     return res.json({
@@ -445,7 +445,7 @@ export const getItemCart = async (req: Request, res: Response) => {
     const warnings: string[] = [];
 
     const adjustedItems = await Promise.all(
-      cart.items.map(async (item) => {
+      cart.items.map(async (item: any) => {
         let isAdjusted = false;
         const availableStock = item.product.stock;
 
@@ -476,7 +476,7 @@ export const getItemCart = async (req: Request, res: Response) => {
       })
     );
 
-    const finalItems = adjustedItems.filter((i) => i !== null);
+    const finalItems = adjustedItems.filter((i: any) => i !== null);
     const total = subtotal + shippingCost;
 
     return res.json({

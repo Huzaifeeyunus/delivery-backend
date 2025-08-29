@@ -1,8 +1,10 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.refundOrder = exports.handlePaymentFailure = exports.markOrderAsPaid = exports.updateDeliveryStatus = exports.updatePaymentStatus = exports.updateOrderStatus = exports.getVendorOrders = exports.getUserOrders = exports.getCustomerOrders = exports.paidOrders = exports.getOrderDetails = exports.placeOrder = exports.initiatePayment = void 0;
-const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
+const prisma_1 = __importDefault(require("../lib/prisma"));
 // src/controllers/checkout.controller.ts 
 // POST /api/payments/initiate
 const initiatePayment = async (req, res) => {
@@ -16,7 +18,7 @@ const initiatePayment = async (req, res) => {
         // 1. Generate transaction reference
         const reference = `TX-${Date.now()}-${userId}`;
         // 2. Save transaction in DB
-        const transaction = await prisma.transaction.create({
+        const transaction = await prisma_1.default.transaction.create({
             data: {
                 orderId: cartId,
                 method,
@@ -43,14 +45,14 @@ const placeOrder = async (req, res) => {
         if (!userId)
             return res.status(401).json({ error: "Unauthorized" });
         // 1. Verify transaction
-        const transaction = await prisma.transaction.findFirst({
+        const transaction = await prisma_1.default.transaction.findFirst({
             where: { reference: transactionId },
         });
         if (!transaction || transaction.status !== "success") {
             return res.status(400).json({ error: "Payment not confirmed" });
         }
         // 2. Fetch user's cart
-        const cart = await prisma.cart.findFirst({
+        const cart = await prisma_1.default.cart.findFirst({
             where: { userId },
             include: { items: { include: { product: true, variant: true } } },
         });
@@ -61,7 +63,7 @@ const placeOrder = async (req, res) => {
         const subtotal = cart.items.reduce((sum, item) => sum + (item.variant?.price ?? item.product.price) * item.quantity, 0);
         const total = subtotal + (shippingFee ?? 0);
         // 4. Create the order safely
-        const order = await prisma.order.create({
+        const order = await prisma_1.default.order.create({
             data: {
                 status: "pending",
                 subtotal,
@@ -95,12 +97,12 @@ const placeOrder = async (req, res) => {
             include: { items: true, payment: true, transactions: true },
         });
         // 5. Link transaction back to order
-        await prisma.transaction.update({
+        await prisma_1.default.transaction.update({
             where: { id: transaction.id },
             data: { orderId: order.id },
         });
         // 6. Clear cart items
-        await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
+        await prisma_1.default.cartItem.deleteMany({ where: { cartId: cart.id } });
         res.json({ success: true, order });
     }
     catch (err) {
@@ -112,7 +114,7 @@ exports.placeOrder = placeOrder;
 const getOrderDetails = async (req, res) => {
     const { orderId } = req.params;
     try {
-        const order = await prisma.order.findUnique({
+        const order = await prisma_1.default.order.findUnique({
             where: { id: Number(orderId) },
             include: {
                 customer: true,
@@ -137,7 +139,7 @@ const getOrderDetails = async (req, res) => {
 };
 exports.getOrderDetails = getOrderDetails;
 const paidOrders = async (req, res) => {
-    await prisma.order.findMany({
+    await prisma_1.default.order.findMany({
         where: { paymentStatus: "paid" },
     });
 };
@@ -145,7 +147,7 @@ exports.paidOrders = paidOrders;
 const getCustomerOrders = async (req, res) => {
     const { userId } = req.params;
     try {
-        const orders = await prisma.order.findMany({
+        const orders = await prisma_1.default.order.findMany({
             where: { customerId: Number(userId) },
             include: {
                 items: {
@@ -176,7 +178,7 @@ const getUserOrders = async (req, res) => {
         return res.status(400).json({ error: "Invalid userId" });
     }
     try {
-        const orders = await prisma.order.findMany({
+        const orders = await prisma_1.default.order.findMany({
             where: { customerId: userId },
             include: {
                 items: {
@@ -209,7 +211,7 @@ const getVendorOrders = async (req, res) => {
         return res.status(400).json({ error: "Invalid vendorId" });
     }
     try {
-        const orders = await prisma.order.findMany({
+        const orders = await prisma_1.default.order.findMany({
             where: { vendorId },
             include: {
                 items: {
@@ -240,7 +242,7 @@ const updateOrderStatus = async (req, res) => {
     const orderId = parseInt(req.params.id);
     const { status } = req.body;
     try {
-        const order = await prisma.order.findUnique({ where: { id: orderId } });
+        const order = await prisma_1.default.order.findUnique({ where: { id: orderId } });
         if (!order) {
             return res.status(404).json({ error: "Order not found" });
         }
@@ -252,7 +254,7 @@ const updateOrderStatus = async (req, res) => {
             platformFee = commission;
             vendorEarning = order.totalAmount - commission;
         }
-        const updated = await prisma.order.update({
+        const updated = await prisma_1.default.order.update({
             where: { id: orderId },
             data: {
                 status,
@@ -272,7 +274,7 @@ const updatePaymentStatus = async (req, res) => {
     const { orderId } = req.params;
     const { paymentStatus, refundReason } = req.body;
     try {
-        const updatedOrder = await prisma.order.update({
+        const updatedOrder = await prisma_1.default.order.update({
             where: { id: Number(orderId) },
             data: {
                 paymentStatus,
@@ -292,7 +294,7 @@ const updateDeliveryStatus = async (req, res) => {
     const { orderId } = req.params;
     const { deliveryStatus, longitude, latitude } = req.body;
     try {
-        const order = await prisma.order.update({
+        const order = await prisma_1.default.order.update({
             where: { id: Number(orderId) },
             data: {
                 deliveryStatus,
@@ -313,7 +315,7 @@ const markOrderAsPaid = async (req, res) => {
     const { orderId } = req.params;
     const { paymentMethod, paymentRef } = req.body;
     try {
-        const updatedOrder = await prisma.order.update({
+        const updatedOrder = await prisma_1.default.order.update({
             where: { id: Number(orderId) },
             data: {
                 paymentStatus: "paid",
@@ -334,7 +336,7 @@ exports.markOrderAsPaid = markOrderAsPaid;
 const handlePaymentFailure = async (req, res) => {
     const { orderId, errorMessage } = req.body;
     try {
-        const order = await prisma.order.update({
+        const order = await prisma_1.default.order.update({
             where: { id: orderId },
             data: {
                 paymentStatus: "failed",
@@ -355,11 +357,11 @@ const refundOrder = async (req, res) => {
     const orderId = parseInt(req.params.id);
     const { reason } = req.body;
     try {
-        const order = await prisma.order.findUnique({ where: { id: orderId } });
+        const order = await prisma_1.default.order.findUnique({ where: { id: orderId } });
         if (!order || order.paymentStatus !== "paid") {
             return res.status(400).json({ error: "Invalid order for refund" });
         }
-        const updated = await prisma.order.update({
+        const updated = await prisma_1.default.order.update({
             where: { id: orderId },
             data: {
                 paymentStatus: "refunded",

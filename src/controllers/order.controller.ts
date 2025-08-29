@@ -1,8 +1,7 @@
-import { Request, Response } from "express";
-import { OrderStatus, PrismaClient } from "@prisma/client";
+import { Request, Response } from "express"; 
 import { log } from "console";
-
-const prisma = new PrismaClient();
+import prisma from "../lib/prisma";
+ 
 
  // src/controllers/checkout.controller.ts 
 // POST /api/payments/initiate
@@ -70,7 +69,7 @@ export const initiatePayment = async (req: Request, res: Response) => {
     } 
     // 3. Calculate totals
     const subtotal = cart.items.reduce(
-      (sum, item) => sum + (item.variant?.price ?? item.product.price) * item.quantity,
+      (sum: any, item: any) => sum + (item.variant?.price ?? item.product.price) * item.quantity,
       0
     );
     const total = subtotal + (shippingFee ?? 0);
@@ -85,7 +84,7 @@ export const initiatePayment = async (req: Request, res: Response) => {
         customer: { connect: { id: userId } },
         address: addressId ? { connect: { id: addressId } } : undefined,
         items: {
-          create: cart.items.map((item) => ({
+          create: cart.items.map((item: any) => ({
             productId: item.productId,
             variantId: item.variantId,
             quantity: item.quantity,

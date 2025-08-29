@@ -10,6 +10,6 @@ const payment_controller_1 = require("../controllers/payment.controller");
 const router = express_1.default.Router();
 router.post("/initiate", auth_controller_1.protect, payment_controller_1.initiatePayment);
 router.get("/verify", auth_controller_1.protect, payment_controller_1.verifyPayment);
-router.get("/payment/:customerId", auth_controller_1.protect, payment_controller_1.ViewPayment);
-router.get("/payment/customers/all", auth_controller_1.protect, payment_controller_1.ViewAllPayments);
+router.get("/payment/:customerId", auth_controller_1.protect, payment_controller_1.viewPayment);
+router.get("/payment/customers/all", auth_controller_1.protect, payment_controller_1.viewAllPayments);
 exports.default = router;
