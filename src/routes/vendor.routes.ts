@@ -6,8 +6,7 @@ import {
   updateVendor,
   deleteVendor,
 } from "../controllers/vender.controller";
-import { protect } from "../controllers/auth.controller";
-import { Upload } from "lucide-react";
+import { protect } from "../controllers/auth.controller"; 
 import { createUploader } from "../middlewares/upload.middleware";
 
 const router = Router();
