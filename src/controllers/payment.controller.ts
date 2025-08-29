@@ -2,26 +2,33 @@
 import { Request, Response } from "express";
 import axios from "axios";
 import prisma from "../lib/prisma";
-import { User } from "@prisma/client";
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY!;
+
+// --------------------- INITIATE PAYMENT ---------------------
+interface PaystackInitResponse {
+  status: boolean;
+  message: string;
+  data: {
+    authorization_url: string;
+    reference: string;
+    [key: string]: any;
+  };
+}
 
 export const initiatePayment = async (req: Request, res: Response) => {
   try {
     const { email, amount } = req.body;
-
-    if (!email || !amount) {
+    if (!email || !amount)
       return res.status(400).json({ error: "Email and amount are required" });
-    }
 
-    const paystackRes = await axios.post(
+    const { data: paystackData } = await axios.post<PaystackInitResponse>(
       "https://api.paystack.co/transaction/initialize",
       {
         email,
-        amount: amount * 100, // Paystack expects kobo (i.e. GHS * 100)
+        amount: amount * 100, // Paystack expects kobo
         currency: "GHS",
-        callback_url: `${process.env.VITE_BASE_URL ?? "http://localhost:5173"}/customer/checkout`, // 👈 redirect back here
-        //callback_url: `${process.env.VITE_BASE_URL ?? "http://localhost:5173"}/customer/checkout`, // 👈 redirect back here
+        callback_url: `${process.env.VITE_BASE_URL ?? "http://localhost:5173"}/customer/checkout`,
       },
       {
         headers: {
@@ -31,63 +38,57 @@ export const initiatePayment = async (req: Request, res: Response) => {
       }
     );
 
-    const { authorization_url, reference } = paystackRes.data.data;
+    const { authorization_url, reference } = paystackData.data;
 
-    // Create transaction in DB (without orderId yet)
     await prisma.transaction.create({
       data: {
         reference,
         method: "Paystack",
         amount,
         status: "initiated",
-        rawData: paystackRes.data,
-        // orderId will be linked later when order is created
+        rawData: paystackData as any,
       },
     });
 
-
-    res.json({
-      authorizationUrl: authorization_url,
-      transactionId: reference, // use this later for order confirmation
-    });
+    res.json({ authorizationUrl: authorization_url, transactionId: reference });
   } catch (err: any) {
     console.error("Paystack init error:", err.response?.data || err.message);
     res.status(500).json({ error: "Failed to initiate payment" });
   }
 };
 
+// --------------------- VERIFY PAYMENT ---------------------
+interface PaystackVerifyResponse {
+  status: boolean;
+  message: string;
+  data: {
+    status: string;
+    reference: string;
+    [key: string]: any;
+  };
+}
 
-// src/controllers/payments.controller.ts 
-// 2.2 Verify Payment
 export const verifyPayment = async (req: Request, res: Response) => {
   try {
     let reference = req.query.reference || "";
-
     if (!reference) return res.status(400).json({ error: "Reference is required" });
-
-    // Convert reference to string if it came as array
     if (Array.isArray(reference)) reference = reference[0];
     reference = reference.toString();
 
-    const verifyRes = await axios.get(
+    const { data: paystackData } = await axios.get<PaystackVerifyResponse>(
       `https://api.paystack.co/transaction/verify/${reference}`,
       { headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` } }
     );
 
-    if (verifyRes.data.data.status !== "success")
+    if (paystackData.data.status !== "success")
       return res.status(400).json({ success: false, error: "Payment failed" });
 
-
-    //look for transaction
-    const transactionRecord = await prisma.transaction.findFirst({
-      where: { reference },
-    });
+    const transactionRecord = await prisma.transaction.findFirst({ where: { reference } });
     if (!transactionRecord) return res.status(404).json({ error: "Transaction not found" });
 
-    // Update transaction status  
     await prisma.transaction.update({
-      where: { id: transactionRecord.id }, // ✅ now TypeScript is happy
-      data: { status: "success", rawData: verifyRes.data },
+      where: { id: transactionRecord.id },
+      data: { status: "success", rawData: paystackData as any },
     });
 
     res.json({ success: true, transactionId: reference });
@@ -97,59 +98,35 @@ export const verifyPayment = async (req: Request, res: Response) => {
   }
 };
 
-
-export const ViewPayment = async (req: Request, res: Response) => {
+// --------------------- VIEW CUSTOMER PAYMENTS ---------------------
+export const viewPayment = async (req: Request, res: Response) => {
   try {
     const userId = Number(req.user?.id);
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
     const payments = await prisma.payment.findMany({
-      where: {
-        order: {
-          customerId: userId, // only payments for this user's orders
-        },
-      },
-      include: {
-        order: {
-          select: {
-            id: true,
-            placedAt: true,
-            status: true,
-            totalAmount: true,
-          },
-        },
-      },
-      orderBy: {
-        paidAt: "desc", // newest first
-      },
+      where: { order: { customerId: userId } },
+      include: { order: { select: { id: true, placedAt: true, status: true, totalAmount: true } } },
+      orderBy: { paidAt: "desc" },
     });
 
     res.json(payments);
-  } catch (err) {
+  } catch (err: any) {
     console.error("Error fetching payments:", err);
     res.status(500).json({ error: "Failed to fetch payments" });
   }
 };
 
-
-// GET /admin/payments
-export const ViewAllPayments = async (req: Request, res: Response) => {
+// --------------------- VIEW ALL PAYMENTS (ADMIN) ---------------------
+export const viewAllPayments = async (req: Request, res: Response) => {
   try {
-    const user = req.user || ""; // make sure your JWT/middleware attaches role
-    if (!user) {
-      return res.status(403).json({ error: "Forbidden: Admins only" });
-    }
+    const user = req.user;
+    if (!user) return res.status(403).json({ error: "Forbidden: Admins only" });
 
-    const getUser = await prisma.user.findFirst({where: {id: Number(user.id)}});
-    if (!getUser) {
+    const getUser = await prisma.user.findFirst({ where: { id: Number(user.id) } });
+    if (!getUser || !getUser.role.toString().startsWith("ADMIN"))
       return res.status(403).json({ error: "Forbidden: Admins only" });
-    }
 
-
-    const userRole = getUser.role;
-    if (!userRole.toString().startsWith("ADMIN")) {
-      return res.status(403).json({ error: "Forbidden: Admins only" });
-    }
     const { status, customerId, fromDate, toDate } = req.query;
 
     const payments = await prisma.payment.findMany({
@@ -170,23 +147,15 @@ export const ViewAllPayments = async (req: Request, res: Response) => {
             placedAt: true,
             status: true,
             totalAmount: true,
-            customer: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
+            customer: { select: { id: true, name: true, email: true } },
           },
         },
       },
-      orderBy: {
-        paidAt: "desc",
-      },
+      orderBy: { paidAt: "desc" },
     });
 
     res.json(payments);
-  } catch (err) {
+  } catch (err: any) {
     console.error("Error fetching all payments:", err);
     res.status(500).json({ error: "Failed to fetch payments" });
   }
