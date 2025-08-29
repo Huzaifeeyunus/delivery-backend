@@ -1,0 +1,41 @@
+name: Azure Node.js Deploy
+
+on:
+  push:
+    branches:
+      - main  # Deploy when you push to main branch
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Step 2: Setup Node
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      # Step 3: Install dependencies
+      - name: Install dependencies
+        run: npm install
+
+      # Step 4: Generate Prisma client
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # Step 5: Build TypeScript
+      - name: Build TypeScript
+        run: npm run build
+
+      # Step 6: Deploy to Azure Web App
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: delivery-backend-ghana        # <-- replace with your App Service name
+          slot-name: production
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
