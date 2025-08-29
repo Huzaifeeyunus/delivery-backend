@@ -1,0 +1,24 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const order_controller_1 = require("../controllers/order.controller");
+const auth_controller_1 = require("../controllers/auth.controller");
+const router = express_1.default.Router();
+router.get("/", order_controller_1.getOrderDetails);
+router.get("/:orderId", order_controller_1.getOrderDetails);
+router.get("/user/:userId", order_controller_1.getUserOrders);
+router.get("/me/current/customer/:userId", order_controller_1.getCustomerOrders);
+router.get("/vendors/vendor/:vendorId", order_controller_1.getVendorOrders);
+router.post("/payments/pay/initiate", auth_controller_1.protect, order_controller_1.initiatePayment);
+router.post("/placeOrder", auth_controller_1.protect, order_controller_1.placeOrder);
+router.post("/", auth_controller_1.protect, order_controller_1.placeOrder);
+router.patch("/:orderId/status", auth_controller_1.protect, order_controller_1.updateOrderStatus);
+router.post("/order/:orderId/pay", auth_controller_1.protect, order_controller_1.markOrderAsPaid);
+router.post("/:orderId/payment-failed", auth_controller_1.protect, order_controller_1.handlePaymentFailure);
+router.post("/:orderId/refund", auth_controller_1.protect, order_controller_1.refundOrder);
+router.patch("/order/d-s/:orderId/delivery-status", auth_controller_1.protect, order_controller_1.updateDeliveryStatus);
+router.patch("/order/:orderId/payment-status", auth_controller_1.protect, order_controller_1.updatePaymentStatus);
+exports.default = router;

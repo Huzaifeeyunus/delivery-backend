@@ -1,0 +1,14 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const address_controller_1 = require("../controllers/address.controller");
+const auth_controller_1 = require("../controllers/auth.controller");
+const router = (0, express_1.Router)();
+router.post("/", auth_controller_1.protect, address_controller_1.createAddress);
+router.get("/", auth_controller_1.protect, address_controller_1.getUserAddresses);
+router.get("/default/:id", auth_controller_1.protect, address_controller_1.setDefaultAddress);
+//router.put("/:id", authenticate, updateAddress);
+router.patch("/:id/default", auth_controller_1.protect, address_controller_1.setDefaultAddress);
+router.put("/:id", auth_controller_1.protect, address_controller_1.editAddress);
+router.delete("/:id", auth_controller_1.protect, address_controller_1.deleteAddress);
+exports.default = router;

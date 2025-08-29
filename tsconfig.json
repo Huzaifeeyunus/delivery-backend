@@ -1,0 +1,34 @@
+
+
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "jsx": "react-jsx"
+  },
+  "include": ["src","prisma","types"]
+}
+
+/* {
+  "compilerOptions": {
+    "target": "ES2020",                         // Modern JS output
+    "module": "commonjs",                       // Node.js compatibility
+    "rootDir": "./src",                         // Your source code location
+    "outDir": "./dist",                         // Where compiled files go
+    "strict": true,                             // All strict type checks
+    "esModuleInterop": true,                    // Allow import/export compatibility
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  "include": ["src", "prisma"]
+}
+ */

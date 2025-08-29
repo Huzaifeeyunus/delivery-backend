@@ -1,0 +1,485 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-1.1.x"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  passwordHash String
+  phone        String?
+  role         Role
+  createdAt    DateTime @default(now())
+  imageUrl     String?
+
+  vendor     Vendor?
+  addresses  Address[]
+  orders     Order[]   @relation("CustomerOrders")
+  deliveries Order[]   @relation("DeliveryOrders")
+  Cart       Cart[] // A user can have multiple carts, if you allow that
+
+
+  @@map("user")  // maps Prisma model to lowercase table
+}
+
+model Vendor {
+  id          Int     @id @default(autoincrement())
+  user        User    @relation(fields: [userId], references: [id])
+  userId      Int     @unique
+  shopName    String
+  shopPhone   String
+  shopLocation String
+  shopLongitude      Float?  
+  shopLatitude       Float? 
+  shopAddress String?
+  shopEmail String?
+  shopWebsite String?
+  shopOwner String?
+  isActive    Boolean @default(true)
+  imageUrl  String?
+  products Product[]
+  orders   Order[]
+
+  
+  @@map("vendor")  // maps Prisma model to lowercase table
+}
+ 
+
+ model Product {
+  id       Int    @id @default(autoincrement())
+  vendor   Vendor @relation(fields: [vendorId], references: [id])
+  vendorId Int
+
+  name            String
+  slug            String  @unique
+  description     String
+  longDescription String // Rich product details
+
+  brandId    Int
+  materialId Int
+  originId   Int
+
+  brand    Brand?     @relation(fields: [brandId], references: [id])
+  material Material?  @relation(fields: [materialId], references: [id])
+  origin   Origin?    @relation(fields: [originId], references: [id]) // e.g., China, Dubai
+
+  tag      String?     // ["baby", "boys", "premium"]
+  features Json?       // Flexible specs
+
+  categoryId    Int
+  category      Category     @relation(fields: [categoryId], references: [id])
+  subCategoryId Int?
+  subCategory   SubCategory? @relation(fields: [subCategoryId], references: [id])
+
+  weight     Float? // for logistics
+  dimensions String? // "30x20x10 cm" format
+
+  SKU     String?
+  barcode String?
+
+  // Default/base price & stock (used if no variants exist)
+  price         Float
+  discountPrice Float?
+  currency      String @default("GHS")
+
+  stock       Int
+  stockStatus String  @default("In Stock")
+  available   Boolean @default(true)
+  isFeatured  Boolean @default(false)
+  isApproved  Boolean @default(false)
+ 
+  videos   ProductVideo[]
+  ratings  Rating[]
+  reviews  Review[]
+  variants ProductVariant[] // For sizes/colors
+
+  orderItems OrderItem[]
+  CartItem   CartItem[]
+
+  averageRating Float? // Optional caching
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  
+  @@map("product")  // maps Prisma model to lowercase table
+}
+
+model ProductVariant {
+  id        Int     @id @default(autoincrement())
+  product   Product @relation(fields: [productId], references: [id])
+  productId Int
+
+  color   String?
+  size    String?
+  SKU     String?
+  barcode String?
+
+  price         Float
+  discountPrice Float?
+  stock         Int
+  stockStatus   String  @default("In Stock")
+  available     Boolean @default(true)
+
+  images   ProductImage[] // Optional: per-variant images
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  cartItems  CartItem[]
+  orderItem  OrderItem[]
+
+  
+  @@map("productvariant")  // maps Prisma model to lowercase table
+}
+
+
+model Category {
+  id            Int           @id @default(autoincrement())
+  name          String        @unique
+  products      Product[]
+  subCategories SubCategory[]
+
+  
+  @@map("category")  // maps Prisma model to lowercase table
+}
+
+model SubCategory {
+  id         Int       @id @default(autoincrement())
+  name       String
+  category   Category  @relation(fields: [categoryId], references: [id])
+  categoryId Int
+  products   Product[]
+
+  
+  @@map("subcategory")  // maps Prisma model to lowercase table
+}
+
+
+model Brand {
+  id        Int      @id @default(autoincrement())
+  name     String  
+  products  Product[] 
+
+  
+  @@map("brand")  // maps Prisma model to lowercase table
+}
+model Material {
+  id        Int      @id @default(autoincrement())
+  name     String 
+  products  Product[] 
+
+  
+  @@map("material")  // maps Prisma model to lowercase table
+}
+model Origin {
+  id        Int      @id @default(autoincrement())
+  name     String 
+  products  Product[] 
+
+  
+  @@map("origin")  // maps Prisma model to lowercase table
+}
+
+model Color {
+  id        Int      @id @default(autoincrement())
+  name     String  
+
+  
+  @@map("color")  // maps Prisma model to lowercase table
+} 
+model Size {
+  id        Int      @id @default(autoincrement())
+  name     String  
+
+  
+  @@map("size")  // maps Prisma model to lowercase table
+} 
+model Tag {
+  id        Int      @id @default(autoincrement())
+  name     String  
+
+  
+  @@map("tag")  // maps Prisma model to lowercase table
+}
+
+model ProductImage {
+  id        Int     @id @default(autoincrement())
+  url       String
+  alt       String?
+  productVariant   ProductVariant? @relation(fields: [productVariantId], references: [id])
+  productVariantId Int?
+
+  
+  @@map("productimage")  // maps Prisma model to lowercase table
+}
+
+model ProductVideo {
+  id        Int     @id @default(autoincrement())
+  url       String
+  caption   String?
+  product   Product @relation(fields: [productId], references: [id])
+  productId Int
+
+  
+  @@map("productvideo")  // maps Prisma model to lowercase table
+}
+
+model Rating {
+  id        Int      @id @default(autoincrement())
+  value     Int // 1 to 5
+  userId    Int
+  product   Product  @relation(fields: [productId], references: [id])
+  productId Int
+  createdAt DateTime @default(now())
+
+  
+  @@map("rating")  // maps Prisma model to lowercase table
+}
+
+model Review {
+  id        Int      @id @default(autoincrement())
+  title     String
+  comment   String
+  userId    Int
+  product   Product  @relation(fields: [productId], references: [id])
+  productId Int
+  createdAt DateTime @default(now())
+
+  
+  @@map("review")  // maps Prisma model to lowercase table
+}
+
+
+model Payment {
+  id            Int          @id @default(autoincrement())
+  order         Order?        @relation(fields: [orderId], references: [id])
+  orderId       Int?          @unique
+  method        String
+  status        String       // "pending" | "paid" | "failed"
+  amount        Float
+  paidAt        DateTime?
+  reference     String?      // external reference
+  transaction   Transaction @relation(fields: [transactionId], references: [id])
+  transactionId Int          @unique
+
+  
+  @@map("payment")  // maps Prisma model to lowercase table
+}
+
+model Transaction {
+  id        Int        @id @default(autoincrement())
+  order     Order?      @relation(fields: [orderId], references: [id])
+  orderId   Int?
+  payment   Payment?   @relation // optional back-reference
+  amount    Float
+  status    String     // "initiated" | "pending" | "success" | "failed"
+  method    String
+  reference String
+  rawData   Json?
+  createdAt DateTime   @default(now())
+
+  
+  @@map("transaction")  // maps Prisma model to lowercase table
+}
+
+ 
+
+model Delivery {
+  id          Int       @id @default(autoincrement())
+  order       Order     @relation(fields: [orderId], references: [id])
+  orderId     Int       @unique
+  driverId    Int? // Optional, if a delivery person is assigned
+  status      String    @default("pending") // pending | on_the_way | delivered | failed
+  startedAt   DateTime? // when delivery starts
+  deliveredAt DateTime?
+  notes       String?
+
+  
+  @@map("delivery")  // maps Prisma model to lowercase table
+}
+
+model Order {
+  id           Int        @id @default(autoincrement())
+  customer     User       @relation("CustomerOrders", fields: [customerId], references: [id])
+  customerId   Int
+  vendor       Vendor?     @relation(fields: [vendorId], references: [id])
+  vendorId     Int?
+  delivery     User?      @relation("DeliveryOrders", fields: [deliveryId], references: [id])
+  deliveryId   Int?
+  address      Address?   @relation(fields: [addressId], references: [id])
+  addressId    Int?
+
+  status       OrderStatus @default(pending)
+  placedAt     DateTime    @default(now())
+
+  // Totals
+  subtotal     Float       // sum of all item subtotals
+  shippingFee  Float       @default(0)
+  vendorEarning Float      @default(0)
+  platformFee  Float       @default(0)
+  totalAmount  Float       // subtotal + shippingFee
+
+  // Payment
+  paymentStatus PaymentStatus @default(unpaid) // enum: unpaid, paid, failed, refunded
+  paymentMethod PaymentMethod?                 // momo, card, cash
+  paymentRef    String?                        // transaction ref from gateway
+  paymentDate   DateTime?
+  paymentError  String? // error from gateway or internal handling
+  refundReason  String? // if refunded, explain why
+
+  // Delivery
+  deliveryStatus DeliveryStatus @default(pending) // enum: pending | enroute | delivered
+  longitude      Float? // for delivery tracking
+  latitude       Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items    OrderItem[]
+  transactions Transaction[] // NEW: logs from gateway
+  payment  Payment?
+  Delivery Delivery?
+
+  
+  @@map("order")  // maps Prisma model to lowercase table
+}
+
+model OrderItem {
+  id        Int      @id @default(autoincrement())
+  order     Order    @relation(fields: [orderId], references: [id])
+  orderId   Int
+  product   Product  @relation(fields: [productId], references: [id])
+  productId Int
+
+  variant    ProductVariant? @relation(fields: [variantId], references: [id])
+  variantId Int?     // 👈 add this if you want to store variant
+
+  quantity  Int
+  unitPrice Float   // price at the time of purchase
+  subtotal  Float   // quantity * unitPrice
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  
+  @@map("orderitem")  // maps Prisma model to lowercase table
+}
+
+ 
+model Cart {
+  id        Int        @id @default(autoincrement())
+  userId    Int
+  user      User       @relation(fields: [userId], references: [id])
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  
+  @@map("cart")  // maps Prisma model to lowercase table
+}
+
+model CartItem {
+  id         Int        @id @default(autoincrement())
+  cartId     Int
+  productId  Int
+  variantId  Int?       // <-- nullable, in case product has no variants
+  quantity   Int
+  price      Float
+  product    Product    @relation(fields: [productId], references: [id])
+  variant    ProductVariant? @relation(fields: [variantId], references: [id])
+  cart       Cart       @relation(fields: [cartId], references: [id])
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  
+  @@map("cartitem")  // maps Prisma model to lowercase table
+}
+
+
+model Address {
+  id        Int     @id @default(autoincrement())
+  userId    Int
+  title     String // e.g. "Home", "Work"
+  street    String
+  city      String
+  region    String
+  country   String
+  longitude Float?
+  latitude  Float?
+  phone     String
+  isDefault Boolean  @default(false)   // ✅ New field
+  
+  user      User    @relation(fields: [userId], references: [id])
+  orders    Order[]
+
+  createdAt DateTime @default(now())
+
+  
+  @@map("address")  // maps Prisma model to lowercase table
+}
+
+model ImageSlider {
+  id          Int     @id @default(autoincrement())
+  category        String
+  name        String?
+  shortDescription    String?
+  longDescription    String?
+  imageUrl    String
+
+  
+  @@map("imageslider")  // maps Prisma model to lowercase table
+}
+model VideoSlider {
+  id          Int     @id @default(autoincrement())
+  category        String
+  name        String?
+  shortDescription    String?
+  longDescription    String?
+  videoUrl    String
+}
+
+
+
+
+
+enum Role {
+  customer
+  vendor
+  delivery
+  admin
+}
+
+enum OrderStatus {
+  pending
+  accepted
+  preparing
+  picked
+  delivered
+  cancelled
+  failed
+  refunded
+}
+
+enum PaymentMethod {
+  cash
+  momo
+  card
+}
+
+enum PaymentStatus {
+  pending
+  unpaid
+  paid
+  failed
+  refunded
+}
+
+enum DeliveryStatus {
+  pending
+  enroute
+  delivered
+}
