@@ -3,7 +3,7 @@ name: Azure Node.js Deploy
 on:
   push:
     branches:
-      - main  # Deploy when you push to main branch
+      - main  # Deploy when pushing to main branch
 
 jobs:
   build-and-deploy:
@@ -14,7 +14,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Setup Node
+      # Step 2: Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
@@ -22,20 +22,32 @@ jobs:
 
       # Step 3: Install dependencies
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      # Step 4: Generate Prisma client
+      # Step 4: Apply Prisma migrations to MySQL DB
+      - name: Run Prisma Migrate
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      # Step 5: Generate Prisma client
       - name: Generate Prisma client
         run: npx prisma generate
 
-      # Step 5: Build TypeScript
+      # Step 6: Seed database (optional, only if you have prisma/seed.ts or seed.js)
+      - name: Seed Database
+        run: npx prisma db seed
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      # Step 7: Build TypeScript
       - name: Build TypeScript
         run: npm run build
 
-      # Step 6: Deploy to Azure Web App
+      # Step 8: Deploy to Azure Web App
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
         with:
-          app-name: delivery-backend-ghana        # <-- replace with your App Service name
+          app-name: delivery-backend-ghana   # <-- must match exactly your Azure App Service name
           slot-name: production
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}

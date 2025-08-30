@@ -29,9 +29,9 @@ const createProduct = async (req, res) => {
                 slug,
                 categoryId: parseInt(categoryId),
                 subCategoryId: subCategoryId ? parseInt(subCategoryId) : null,
-                brandId: parseInt(brandId),
-                materialId: parseInt(materialId),
-                originId: parseInt(originId),
+                brandId: parseInt(brandId) ?? null,
+                materialId: parseInt(materialId) ?? null,
+                originId: parseInt(originId) ?? null,
                 tag: tag,
                 vendorId: vendor.id,
             },
@@ -87,9 +87,9 @@ const createProductWithImage = async (req, res) => {
                 slug,
                 categoryId: parseInt(categoryId),
                 subCategoryId: parseInt(subCategoryId),
-                brandId: brandId ? parseInt(brandId) : 0,
-                materialId: materialId ? parseInt(materialId) : 0,
-                originId: originId ? parseInt(originId) : 0,
+                brandId: brandId ? parseInt(brandId) : null,
+                materialId: materialId ? parseInt(materialId) : null,
+                originId: originId ? parseInt(originId) : null,
                 tag,
                 vendorId: vendor.id,
             },
@@ -292,11 +292,12 @@ const findProduct = async (req, res) => {
     }
 };
 exports.findProduct = findProduct;
-//syncProductFromVariants
+//syncProductFromVariants 
 async function syncProductFromVariants(productId) {
     const variants = await prisma_1.default.productVariant.findMany({
         where: { productId },
         select: {
+            color: true, size: true, SKU: true,
             price: true,
             discountPrice: true,
             stock: true,
@@ -362,11 +363,11 @@ const updateProductWithImage = async (req, res) => {
                 slug,
                 categoryId: parseInt(categoryId),
                 subCategoryId: subCategoryId ? parseInt(subCategoryId) : null,
-                brandId: parseInt(brandId),
-                materialId: parseInt(materialId),
-                originId: parseInt(originId),
+                brandId: parseInt(brandId) ?? null,
+                materialId: parseInt(materialId) ?? null,
+                originId: parseInt(originId) ?? null,
                 tag: tag,
-                vendorId: vendor.id,
+                vendorId: vendor.id ?? null,
             },
         });
         // Example: variantImagesMap[0] = [File, File, ...]
@@ -403,7 +404,15 @@ const updateProductWithImage = async (req, res) => {
             // Get existing variants for this product
             const existingVariants = await prisma_1.default.productVariant.findMany({
                 where: { productId: product.id },
-                select: { id: true },
+                select: {
+                    id: true,
+                    color: true,
+                    size: true,
+                    SKU: true,
+                    price: true,
+                    stock: true,
+                    available: true,
+                },
             });
             const existingIds = existingVariants.map(v => v.id);
             const incomingIds = parsedVariants.filter(v => v.id).map(v => v.id);
@@ -411,7 +420,7 @@ const updateProductWithImage = async (req, res) => {
             const idsToDelete = existingIds.filter(id => !incomingIds.includes(id));
             if (idsToDelete.length) {
                 await prisma_1.default.productVariant.deleteMany({
-                    where: { id: { in: idsToDelete } },
+                    where: { id: { in: idsToDelete.filter((id) => id !== undefined) } },
                 });
             }
             // Create or update variants
@@ -664,9 +673,9 @@ const updateProduct = async (req, res) => {
                 slug,
                 categoryId: parseInt(categoryId),
                 subCategoryId: subCategoryId ? parseInt(subCategoryId) : null,
-                brandId: parseInt(brandId),
-                materialId: parseInt(materialId),
-                originId: parseInt(originId),
+                brandId: parseInt(brandId) ?? null,
+                materialId: parseInt(materialId) ?? null,
+                originId: parseInt(originId) ?? null,
                 tag: tag,
                 vendorId: vendor?.id,
             },

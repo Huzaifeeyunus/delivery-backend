@@ -22,12 +22,12 @@ const createVideoSlider = async (req, res) => {
                 longDescription,
                 videoUrl: `/uploads/sliders/videos/${file.filename}`,
             }));
-            await prisma_1.default.videoSlider.createMany({
+            await prisma_1.default.videoslider.createMany({
                 data: videosData
             });
         }
         // Step 4 — return full videoslider
-        const fullVideoSlider = await prisma_1.default.videoSlider.findMany();
+        const fullVideoSlider = await prisma_1.default.videoslider.findMany();
         res.status(201).json(fullVideoSlider);
     }
     catch (err) {
@@ -41,7 +41,7 @@ const getVideoSliders = async (_req, res) => {
     const { categoryId, subCategoryId } = _req.query;
     try {
         if (categoryId && !subCategoryId) {
-            const videosliders = await prisma_1.default.videoSlider.findMany();
+            const videosliders = await prisma_1.default.videoslider.findMany();
             res.json(videosliders);
         }
     }
@@ -53,7 +53,7 @@ exports.getVideoSliders = getVideoSliders;
 // Get All VideoSliders
 const findVideoSliderVideo = async (_req, res) => {
     try {
-        const videosliderVideo = await prisma_1.default.videoSlider.findMany({
+        const videosliderVideo = await prisma_1.default.videoslider.findMany({
             where: { id: parseInt(_req.params.id) },
         });
         res.json(videosliderVideo);
@@ -66,7 +66,7 @@ exports.findVideoSliderVideo = findVideoSliderVideo;
 // Find A VideoSliders
 const findVideoSlider = async (req, res) => {
     try {
-        const videoslider = await prisma_1.default.videoSlider.findUnique({
+        const videoslider = await prisma_1.default.videoslider.findUnique({
             where: { id: parseInt(req.params.id) }
         });
         if (!videoslider) {
@@ -91,7 +91,7 @@ const updateVideoSlider = async (req, res) => {
         // Handle video
         const videoFiles = files.videos || [];
         if (videoFiles.length > 0) {
-            await Promise.all(videoFiles.map(file => prisma_1.default.videoSlider.create({
+            await Promise.all(videoFiles.map(file => prisma_1.default.videoslider.create({
                 data: {
                     category,
                     name,
@@ -102,7 +102,7 @@ const updateVideoSlider = async (req, res) => {
             })));
         }
         // Step 4 — return full videoslider
-        const fullVideoSlider = await prisma_1.default.videoSlider.findUnique({
+        const fullVideoSlider = await prisma_1.default.videoslider.findUnique({
             where: { id: id },
         });
         res.status(201).json(fullVideoSlider);
@@ -123,7 +123,7 @@ const deleteVideoSlider = async (req, res) => {
                 return res.status(403).json({ message: "Not a vendor." });
             }
         }
-        await prisma_1.default.videoSlider.delete({ where: { id: parseInt(id) } });
+        await prisma_1.default.videoslider.delete({ where: { id: parseInt(id) } });
         res.json({ message: "VideoSlider deleted." });
     }
     catch (err) {
