@@ -887,34 +887,58 @@ export const updateProduct = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Failed to update product.", error: err });
   }
 };
- 
-
-
-// Delete Product
-export const deleteProduct = async (req: Request, res: Response) => {
-  const id = req.params.id;
-  const user = req.user; 
   
+
+// Delete Product and all related records
+export const deleteProduct = async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+  const user = req.user;
 
   try {
     const vendor = await prisma.vendor.findUnique({
       where: { userId: user?.id },
     });
 
-    
     if (!vendor) {
-      if(!user?.email.startsWith("huzaifeeyunus")){ 
+      if (!user?.email.startsWith("huzaifeeyunus")) {
         return res.status(403).json({ message: "Not a vendor." });
       }
     }
 
-    await prisma.productImage.deleteMany({ where: { productVariantId: parseInt(id) } }); 
-    await prisma.productVariant.deleteMany({ where: { productId: parseInt(id) } });
-    await prisma.product.delete({ where: { id: parseInt(id) } });
+    // 1️⃣ Find all variants of this product
+    const variants = await prisma.productVariant.findMany({
+      where: { productId: id },
+      select: { id: true },
+    });
 
-    res.json({ message: "Product deleted." });
+    const variantIds = variants.map(v => v.id);
+
+    // 2️⃣ Delete all product images for these variants
+    if (variantIds.length > 0) {
+      await prisma.productImage.deleteMany({
+        where: { productVariantId: { in: variantIds } },
+      });
+    }
+
+    // 3️⃣ Delete all variants
+    await prisma.productVariant.deleteMany({
+      where: { productId: id },
+    });
+
+    // 4️⃣ Delete ratings and reviews
+    await prisma.rating.deleteMany({ where: { productId: id } });
+    await prisma.review.deleteMany({ where: { productId: id } });
+
+    // 5️⃣ Delete cart items and order items referencing this product
+    await prisma.cartItem.deleteMany({ where: { productId: id } });
+    await prisma.orderItem.deleteMany({ where: { productId: id } });
+
+    // 6️⃣ Finally delete the product itself
+    await prisma.product.delete({ where: { id } });
+
+    res.json({ message: "Product and all related data deleted successfully." });
   } catch (err) {
-    console.error("Error update product:", err);
+    console.error("Error deleting product:", err);
     res.status(500).json({ message: "Failed to delete product." });
   }
-};   
+};
