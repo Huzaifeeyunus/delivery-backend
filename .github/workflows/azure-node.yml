@@ -45,3 +45,4 @@ jobs:
           app-name: delivery-backend-ghana   # must match Azure App Service name exactly
           slot-name: production
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+ 
