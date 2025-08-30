@@ -8,6 +8,24 @@ interface MulterFiles {
     videos?: Express.Multer.File[]; 
   [key: string]: Express.Multer.File[] | undefined; // allow dynamic keys like variantImages_0
 }
+interface VariantForm {
+  id?: number | 0; 
+  color: string | "null";
+  size: string | "null";
+  SKU: string | "null";
+  price: number | 0;
+  stock: number | 0;
+  available: boolean | false;
+  discountPrice: number | 0;
+  images?: ProductImageForm[];
+}
+
+interface ProductImageForm {
+  id?: number | 0;
+  url: string;
+  alt?: string | "null";
+  productVariantId?: number | 0;
+}
 
 
 // Create Product
@@ -50,9 +68,9 @@ export const createProduct = async (req: Request, res: Response) => {
         slug,
         categoryId: parseInt(categoryId),
         subCategoryId: subCategoryId ? parseInt(subCategoryId) : null,
-        brandId: parseInt(brandId),
-        materialId: parseInt(materialId),
-        originId: parseInt(originId), 
+        brandId: parseInt(brandId) ?? null,
+        materialId: parseInt(materialId) ?? null,
+        originId: parseInt(originId) ?? null, 
         tag: tag,
         vendorId: vendor.id, 
       },
@@ -132,9 +150,9 @@ export const createProductWithImage = async (req: Request, res: Response) => {
         slug,
         categoryId: parseInt(categoryId),
         subCategoryId: parseInt(subCategoryId),
-        brandId: brandId ? parseInt(brandId) : 0,
-        materialId: materialId ? parseInt(materialId) : 0,
-        originId: originId ? parseInt(originId) : 0,
+        brandId: brandId ? parseInt(brandId) : null,
+        materialId: materialId ? parseInt(materialId) : null,
+        originId: originId ? parseInt(originId) : null,
         tag,
         vendorId: vendor.id,
       },
@@ -350,11 +368,12 @@ export const findProduct = async (req: Request, res: Response) => {
 };
 
 
-//syncProductFromVariants
+//syncProductFromVariants 
 async function syncProductFromVariants(productId: number) {
-  const variants = await prisma.productVariant.findMany({
+  const variants: any[] = await prisma.productVariant.findMany({
     where: { productId },
     select: {
+      color: true, size: true, SKU: true,
       price: true,
       discountPrice: true,
       stock: true,
@@ -362,6 +381,8 @@ async function syncProductFromVariants(productId: number) {
       available: true,
     },
   });
+
+
 
   if (variants.length === 0) {
     // No variants, maybe reset product fields
@@ -377,7 +398,7 @@ async function syncProductFromVariants(productId: number) {
     });
     return;
   }
-
+ 
   const minPrice = Math.min(...variants.map(v => v.price));
   const minDiscount = Math.min(
     ...variants.map(v => v.discountPrice ?? Number.MAX_VALUE)
@@ -439,11 +460,11 @@ export const updateProductWithImage = async (req: Request, res: Response) => {
         slug,
         categoryId: parseInt(categoryId),
         subCategoryId: subCategoryId ? parseInt(subCategoryId) : null,
-        brandId: parseInt(brandId),
-        materialId: parseInt(materialId),
-        originId: parseInt(originId), 
+        brandId: parseInt(brandId)  ?? null,
+        materialId: parseInt(materialId)  ?? null,
+        originId: parseInt(originId)  ?? null, 
         tag: tag, 
-        vendorId: vendor.id, 
+        vendorId: vendor.id  ?? null, 
       },
     });
 
@@ -483,10 +504,19 @@ if (req.body.variants) {
 
 if (parsedVariants.length) {
   // Get existing variants for this product
-  const existingVariants = await prisma.productVariant.findMany({
-    where: { productId: product.id },
-    select: { id: true },
-  });
+const existingVariants: any[] = await prisma.productVariant.findMany({
+  where: { productId: product.id},
+  select: {
+    id: true,
+    color: true,
+    size: true,
+    SKU: true,
+    price: true,
+    stock: true,
+    available: true,
+  },
+});
+
 
   const existingIds = existingVariants.map(v => v.id);
   const incomingIds = parsedVariants.filter(v => v.id).map(v => v.id);
@@ -495,7 +525,7 @@ if (parsedVariants.length) {
   const idsToDelete = existingIds.filter(id => !incomingIds.includes(id));
   if (idsToDelete.length) {
     await prisma.productVariant.deleteMany({
-      where: { id: { in: idsToDelete } },
+      where: { id: { in: idsToDelete.filter((id): id is number => id !== undefined) } },
     });
   }
 
@@ -825,9 +855,9 @@ export const updateProduct = async (req: Request, res: Response) => {
         slug,
         categoryId: parseInt(categoryId),
         subCategoryId: subCategoryId ? parseInt(subCategoryId) : null,
-        brandId: parseInt(brandId),
-        materialId: parseInt(materialId),
-        originId: parseInt(originId), 
+        brandId: parseInt(brandId) ?? null,
+        materialId: parseInt(materialId) ?? null,
+        originId: parseInt(originId) ?? null, 
         tag: tag, 
         vendorId: vendor?.id, 
       },
@@ -887,4 +917,4 @@ export const deleteProduct = async (req: Request, res: Response) => {
     console.error("Error update product:", err);
     res.status(500).json({ message: "Failed to delete product." });
   }
-};
+};   

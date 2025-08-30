@@ -16,7 +16,7 @@ import {
 import { protect } from "../controllers/auth.controller";
 import { createUploader } from "../middlewares/upload.middleware";
 
-   
+    
 const router = Router();
 
 const uploader = createUploader();

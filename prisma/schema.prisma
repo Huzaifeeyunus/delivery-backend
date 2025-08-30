@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-1.1.x"]
 }
 
@@ -9,133 +9,117 @@ datasource db {
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   name         String
-  email        String   @unique
+  email        String    @unique
   passwordHash String
   phone        String?
   role         Role
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
   imageUrl     String?
+  addresses    Address[]
+  Cart         Cart[]
+  orders       Order[]   @relation("CustomerOrders")
+  deliveries   Order[]   @relation("DeliveryOrders")
+  vendor       Vendor?
 
-  vendor     Vendor?
-  addresses  Address[]
-  orders     Order[]   @relation("CustomerOrders")
-  deliveries Order[]   @relation("DeliveryOrders")
-  Cart       Cart[] // A user can have multiple carts, if you allow that
-
-
-  @@map("user")  // maps Prisma model to lowercase table
+  @@map("user")
 }
 
 model Vendor {
-  id          Int     @id @default(autoincrement())
-  user        User    @relation(fields: [userId], references: [id])
-  userId      Int     @unique
-  shopName    String
-  shopPhone   String
-  shopLocation String
-  shopLongitude      Float?  
-  shopLatitude       Float? 
-  shopAddress String?
-  shopEmail String?
-  shopWebsite String?
-  shopOwner String?
-  isActive    Boolean @default(true)
-  imageUrl  String?
-  products Product[]
-  orders   Order[]
+  id            Int       @id @default(autoincrement())
+  userId        Int       @unique
+  shopName      String
+  shopAddress   String?
+  isActive      Boolean   @default(true)
+  shopEmail     String?
+  shopLatitude  Float?
+  shopLocation  String
+  shopLongitude Float?
+  shopOwner     String?
+  shopPhone     String
+  shopWebsite   String?
+  imageUrl      String?
+  orders        Order[]
+  products      Product[]
+  user          User      @relation(fields: [userId], references: [id])
 
-  
-  @@map("vendor")  // maps Prisma model to lowercase table
+  @@map("vendor")
 }
- 
 
- model Product {
-  id       Int    @id @default(autoincrement())
-  vendor   Vendor @relation(fields: [vendorId], references: [id])
-  vendorId Int
-
+model Product {
+  id              Int              @id @default(autoincrement())
+  vendorId        Int
   name            String
-  slug            String  @unique
   description     String
-  longDescription String // Rich product details
+  price           Float?             
+  available       Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  SKU             String?
+  stock           Int
+  updatedAt       DateTime         @updatedAt
+  averageRating   Float?
+  barcode         String?
+  categoryId      Int
+  currency        String           @default("GHS")
+  dimensions      String?
+  discountPrice   Float?
+  features        Json?
+  isApproved      Boolean          @default(false)
+  isFeatured      Boolean          @default(false)
+  longDescription String?
+  slug            String           @unique
+  stockStatus     String           @default("In Stock")
+  subCategoryId   Int?
+  weight          Float?
+  brandId         Int?
+  materialId      Int?
+  originId        Int?
+  tag             String?
+  CartItem        CartItem[]
+  orderItems      OrderItem[]
+  brand           Brand?            @relation(fields: [brandId], references: [id])
+  category        Category         @relation(fields: [categoryId], references: [id])
+  material        Material?         @relation(fields: [materialId], references: [id])
+  origin          Origin?           @relation(fields: [originId], references: [id])
+  subCategory     SubCategory?     @relation(fields: [subCategoryId], references: [id])
+  vendor          Vendor           @relation(fields: [vendorId], references: [id])
+  variants        ProductVariant[]
+  videos          ProductVideo[]
+  ratings         Rating[]
+  reviews         Review[]
 
-  brandId    Int
-  materialId Int
-  originId   Int
-
-  brand    Brand?     @relation(fields: [brandId], references: [id])
-  material Material?  @relation(fields: [materialId], references: [id])
-  origin   Origin?    @relation(fields: [originId], references: [id]) // e.g., China, Dubai
-
-  tag      String?     // ["baby", "boys", "premium"]
-  features Json?       // Flexible specs
-
-  categoryId    Int
-  category      Category     @relation(fields: [categoryId], references: [id])
-  subCategoryId Int?
-  subCategory   SubCategory? @relation(fields: [subCategoryId], references: [id])
-
-  weight     Float? // for logistics
-  dimensions String? // "30x20x10 cm" format
-
-  SKU     String?
-  barcode String?
-
-  // Default/base price & stock (used if no variants exist)
-  price         Float
-  discountPrice Float?
-  currency      String @default("GHS")
-
-  stock       Int
-  stockStatus String  @default("In Stock")
-  available   Boolean @default(true)
-  isFeatured  Boolean @default(false)
-  isApproved  Boolean @default(false)
- 
-  videos   ProductVideo[]
-  ratings  Rating[]
-  reviews  Review[]
-  variants ProductVariant[] // For sizes/colors
-
-  orderItems OrderItem[]
-  CartItem   CartItem[]
-
-  averageRating Float? // Optional caching
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  
-  @@map("product")  // maps Prisma model to lowercase table
+  @@index([brandId], map: "product_brandId_fkey")
+  @@index([categoryId], map: "product_categoryId_fkey")
+  @@index([materialId], map: "product_materialId_fkey")
+  @@index([originId], map: "product_originId_fkey")
+  @@index([subCategoryId], map: "product_subCategoryId_fkey")
+  @@index([vendorId], map: "product_vendorId_fkey")
+  @@map("product")
 }
 
 model ProductVariant {
-  id        Int     @id @default(autoincrement())
-  product   Product @relation(fields: [productId], references: [id])
-  productId Int
-
-  color   String?
-  size    String?
-  SKU     String?
-  barcode String?
-
-  price         Float
-  discountPrice Float?
+  id            Int            @id @default(autoincrement())
+  productId     Int
+  color         String?
+  size          String?
+  SKU           String?
   stock         Int
-  stockStatus   String  @default("In Stock")
-  available     Boolean @default(true)
+  price         Float
+  available     Boolean        @default(true)
+  barcode       String?
+  createdAt     DateTime       @default(now())
+  discountPrice Float?
+  stockStatus   String         @default("In Stock")
+  updatedAt     DateTime       @updatedAt
+  cartItems     CartItem[]
+  orderItem     OrderItem[]
+  images        ProductImage[]
+  product       Product        @relation(fields: [productId], references: [id])
 
-  images   ProductImage[] // Optional: per-variant images
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  cartItems  CartItem[]
-  orderItem  OrderItem[]
-
-  
-  @@map("productvariant")  // maps Prisma model to lowercase table
+  @@index([productId], map: "productvariant_productId_fkey")
+  @@map("productvariant")
 }
-
 
 model Category {
   id            Int           @id @default(autoincrement())
@@ -143,101 +127,97 @@ model Category {
   products      Product[]
   subCategories SubCategory[]
 
-  
-  @@map("category")  // maps Prisma model to lowercase table
+  @@map("category")
 }
 
 model SubCategory {
   id         Int       @id @default(autoincrement())
   name       String
-  category   Category  @relation(fields: [categoryId], references: [id])
   categoryId Int
   products   Product[]
+  category   Category  @relation(fields: [categoryId], references: [id])
 
-  
-  @@map("subcategory")  // maps Prisma model to lowercase table
+  @@index([categoryId], map: "subcategory_categoryId_fkey")
+  @@map("subcategory")
 }
-
 
 model Brand {
-  id        Int      @id @default(autoincrement())
-  name     String  
-  products  Product[] 
+  id       Int       @id @default(autoincrement())
+  name     String
+  products Product[]
 
-  
-  @@map("brand")  // maps Prisma model to lowercase table
+  @@map("brand")
 }
+
 model Material {
-  id        Int      @id @default(autoincrement())
-  name     String 
-  products  Product[] 
+  id       Int       @id @default(autoincrement())
+  name     String
+  products Product[]
 
-  
-  @@map("material")  // maps Prisma model to lowercase table
+  @@map("material")
 }
-model Origin {
-  id        Int      @id @default(autoincrement())
-  name     String 
-  products  Product[] 
 
-  
-  @@map("origin")  // maps Prisma model to lowercase table
+model Origin {
+  id       Int       @id @default(autoincrement())
+  name     String
+  products Product[]
+
+  @@map("origin")
 }
 
 model Color {
-  id        Int      @id @default(autoincrement())
-  name     String  
+  id   Int    @id @default(autoincrement())
+  name String
 
-  
-  @@map("color")  // maps Prisma model to lowercase table
-} 
+  @@map("color")
+}
+
 model Size {
-  id        Int      @id @default(autoincrement())
-  name     String  
+  id   Int    @id @default(autoincrement())
+  name String
 
-  
-  @@map("size")  // maps Prisma model to lowercase table
-} 
+  @@map("size")
+}
+
 model Tag {
-  id        Int      @id @default(autoincrement())
-  name     String  
+  id   Int    @id @default(autoincrement())
+  name String
 
-  
-  @@map("tag")  // maps Prisma model to lowercase table
+  @@map("tag")
 }
 
 model ProductImage {
-  id        Int     @id @default(autoincrement())
-  url       String
-  alt       String?
-  productVariant   ProductVariant? @relation(fields: [productVariantId], references: [id])
+  id               Int             @id @default(autoincrement())
+  url              String
+  alt              String?
   productVariantId Int?
+  productVariant   ProductVariant? @relation(fields: [productVariantId], references: [id])
 
-  
-  @@map("productimage")  // maps Prisma model to lowercase table
+  @@index([productVariantId], map: "productimage_productVariantId_fkey")
+  @@map("productimage")
 }
 
 model ProductVideo {
   id        Int     @id @default(autoincrement())
   url       String
   caption   String?
-  product   Product @relation(fields: [productId], references: [id])
   productId Int
+  product   Product @relation(fields: [productId], references: [id])
 
-  
-  @@map("productvideo")  // maps Prisma model to lowercase table
+  @@index([productId], map: "productvideo_productId_fkey")
+  @@map("productvideo")
 }
 
 model Rating {
   id        Int      @id @default(autoincrement())
-  value     Int // 1 to 5
+  value     Int
   userId    Int
-  product   Product  @relation(fields: [productId], references: [id])
   productId Int
   createdAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id])
 
-  
-  @@map("rating")  // maps Prisma model to lowercase table
+  @@index([productId], map: "rating_productId_fkey")
+  @@map("rating")
 }
 
 model Review {
@@ -245,206 +225,188 @@ model Review {
   title     String
   comment   String
   userId    Int
-  product   Product  @relation(fields: [productId], references: [id])
   productId Int
   createdAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id])
 
-  
-  @@map("review")  // maps Prisma model to lowercase table
+  @@index([productId], map: "review_productId_fkey")
+  @@map("review")
 }
 
-
 model Payment {
-  id            Int          @id @default(autoincrement())
-  order         Order?        @relation(fields: [orderId], references: [id])
-  orderId       Int?          @unique
+  id            Int         @id @default(autoincrement())
+  orderId       Int?        @unique
   method        String
-  status        String       // "pending" | "paid" | "failed"
-  amount        Float
+  status        String
   paidAt        DateTime?
-  reference     String?      // external reference
+  amount        Float
+  reference     String?
+  transactionId Int         @unique
+  order         Order?      @relation(fields: [orderId], references: [id])
   transaction   Transaction @relation(fields: [transactionId], references: [id])
-  transactionId Int          @unique
 
-  
-  @@map("payment")  // maps Prisma model to lowercase table
+  @@map("payment")
 }
 
 model Transaction {
-  id        Int        @id @default(autoincrement())
-  order     Order?      @relation(fields: [orderId], references: [id])
+  id        Int      @id @default(autoincrement())
   orderId   Int?
-  payment   Payment?   @relation // optional back-reference
   amount    Float
-  status    String     // "initiated" | "pending" | "success" | "failed"
+  status    String
   method    String
   reference String
   rawData   Json?
-  createdAt DateTime   @default(now())
+  createdAt DateTime @default(now())
+  payment   Payment?
+  order     Order?   @relation(fields: [orderId], references: [id])
 
-  
-  @@map("transaction")  // maps Prisma model to lowercase table
+  @@index([orderId], map: "transaction_orderId_fkey")
+  @@map("transaction")
 }
-
- 
 
 model Delivery {
   id          Int       @id @default(autoincrement())
-  order       Order     @relation(fields: [orderId], references: [id])
   orderId     Int       @unique
-  driverId    Int? // Optional, if a delivery person is assigned
-  status      String    @default("pending") // pending | on_the_way | delivered | failed
-  startedAt   DateTime? // when delivery starts
+  driverId    Int?
+  status      String    @default("pending")
+  startedAt   DateTime?
   deliveredAt DateTime?
   notes       String?
+  order       Order     @relation(fields: [orderId], references: [id])
 
-  
-  @@map("delivery")  // maps Prisma model to lowercase table
+  @@map("delivery")
 }
 
 model Order {
-  id           Int        @id @default(autoincrement())
-  customer     User       @relation("CustomerOrders", fields: [customerId], references: [id])
-  customerId   Int
-  vendor       Vendor?     @relation(fields: [vendorId], references: [id])
-  vendorId     Int?
-  delivery     User?      @relation("DeliveryOrders", fields: [deliveryId], references: [id])
-  deliveryId   Int?
-  address      Address?   @relation(fields: [addressId], references: [id])
-  addressId    Int?
-
-  status       OrderStatus @default(pending)
-  placedAt     DateTime    @default(now())
-
-  // Totals
-  subtotal     Float       // sum of all item subtotals
-  shippingFee  Float       @default(0)
-  vendorEarning Float      @default(0)
-  platformFee  Float       @default(0)
-  totalAmount  Float       // subtotal + shippingFee
-
-  // Payment
-  paymentStatus PaymentStatus @default(unpaid) // enum: unpaid, paid, failed, refunded
-  paymentMethod PaymentMethod?                 // momo, card, cash
-  paymentRef    String?                        // transaction ref from gateway
-  paymentDate   DateTime?
-  paymentError  String? // error from gateway or internal handling
-  refundReason  String? // if refunded, explain why
-
-  // Delivery
-  deliveryStatus DeliveryStatus @default(pending) // enum: pending | enroute | delivered
-  longitude      Float? // for delivery tracking
+  id             Int            @id @default(autoincrement())
+  customerId     Int
+  vendorId       Int?
+  deliveryId     Int?
+  status         OrderStatus    @default(pending)
+  totalAmount    Float
+  placedAt       DateTime       @default(now())
+  paymentDate    DateTime?
+  paymentMethod  PaymentMethod?
+  paymentRef     String?
+  paymentStatus  PaymentStatus  @default(unpaid)
+  platformFee    Float          @default(0)
+  vendorEarning  Float          @default(0)
+  paymentError   String?
+  refundReason   String?
+  addressId      Int?
+  createdAt      DateTime       @default(now())
+  deliveryStatus DeliveryStatus @default(pending)
   latitude       Float?
+  longitude      Float?
+  updatedAt      DateTime       @updatedAt
+  shippingFee    Float          @default(0)
+  subtotal       Float
+  Delivery       Delivery?
+  address        Address?       @relation(fields: [addressId], references: [id])
+  customer       User           @relation("CustomerOrders", fields: [customerId], references: [id])
+  delivery       User?          @relation("DeliveryOrders", fields: [deliveryId], references: [id])
+  vendor         Vendor?        @relation(fields: [vendorId], references: [id])
+  items          OrderItem[]
+  payment        Payment?
+  transactions   Transaction[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  items    OrderItem[]
-  transactions Transaction[] // NEW: logs from gateway
-  payment  Payment?
-  Delivery Delivery?
-
-  
-  @@map("order")  // maps Prisma model to lowercase table
+  @@index([addressId], map: "order_addressId_fkey")
+  @@index([customerId], map: "order_customerId_fkey")
+  @@index([deliveryId], map: "order_deliveryId_fkey")
+  @@index([vendorId], map: "order_vendorId_fkey")
+  @@map("order")
 }
 
 model OrderItem {
-  id        Int      @id @default(autoincrement())
-  order     Order    @relation(fields: [orderId], references: [id])
+  id        Int             @id @default(autoincrement())
   orderId   Int
-  product   Product  @relation(fields: [productId], references: [id])
   productId Int
-
-  variant    ProductVariant? @relation(fields: [variantId], references: [id])
-  variantId Int?     // 👈 add this if you want to store variant
-
   quantity  Int
-  unitPrice Float   // price at the time of purchase
-  subtotal  Float   // quantity * unitPrice
+  createdAt DateTime        @default(now())
+  subtotal  Float
+  unitPrice Float
+  updatedAt DateTime        @updatedAt
+  variantId Int?
+  order     Order           @relation(fields: [orderId], references: [id])
+  product   Product         @relation(fields: [productId], references: [id])
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  
-  @@map("orderitem")  // maps Prisma model to lowercase table
+  @@index([orderId], map: "orderitem_orderId_fkey")
+  @@index([productId], map: "orderitem_productId_fkey")
+  @@index([variantId], map: "orderitem_variantId_fkey")
+  @@map("orderitem")
 }
 
- 
 model Cart {
   id        Int        @id @default(autoincrement())
   userId    Int
-  user      User       @relation(fields: [userId], references: [id])
-  items     CartItem[]
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
+  user      User       @relation(fields: [userId], references: [id])
+  items     CartItem[]
 
-  
-  @@map("cart")  // maps Prisma model to lowercase table
+  @@index([userId], map: "cart_userId_fkey")
+  @@map("cart")
 }
 
 model CartItem {
-  id         Int        @id @default(autoincrement())
-  cartId     Int
-  productId  Int
-  variantId  Int?       // <-- nullable, in case product has no variants
-  quantity   Int
-  price      Float
-  product    Product    @relation(fields: [productId], references: [id])
-  variant    ProductVariant? @relation(fields: [variantId], references: [id])
-  cart       Cart       @relation(fields: [cartId], references: [id])
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  id        Int             @id @default(autoincrement())
+  cartId    Int
+  productId Int
+  quantity  Int
+  price     Float
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  variantId Int?
+  cart      Cart            @relation(fields: [cartId], references: [id])
+  product   Product         @relation(fields: [productId], references: [id])
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
 
-  
-  @@map("cartitem")  // maps Prisma model to lowercase table
+  @@index([cartId], map: "cartitem_cartId_fkey")
+  @@index([productId], map: "cartitem_productId_fkey")
+  @@index([variantId], map: "cartitem_variantId_fkey")
+  @@map("cartitem")
 }
 
-
 model Address {
-  id        Int     @id @default(autoincrement())
+  id        Int      @id @default(autoincrement())
   userId    Int
-  title     String // e.g. "Home", "Work"
-  street    String
   city      String
   region    String
-  country   String
   longitude Float?
   latitude  Float?
+  country   String
+  createdAt DateTime @default(now())
   phone     String
-  isDefault Boolean  @default(false)   // ✅ New field
-  
-  user      User    @relation(fields: [userId], references: [id])
+  street    String
+  title     String
+  isDefault Boolean  @default(false)
+  user      User     @relation(fields: [userId], references: [id])
   orders    Order[]
 
-  createdAt DateTime @default(now())
-
-  
-  @@map("address")  // maps Prisma model to lowercase table
+  @@index([userId], map: "address_userId_fkey")
+  @@map("address")
 }
 
 model ImageSlider {
-  id          Int     @id @default(autoincrement())
-  category        String
-  name        String?
-  shortDescription    String?
-  longDescription    String?
-  imageUrl    String
+  id               Int     @id @default(autoincrement())
+  category         String
+  name             String?
+  shortDescription String?
+  longDescription  String?
+  imageUrl         String
 
-  
-  @@map("imageslider")  // maps Prisma model to lowercase table
-}
-model VideoSlider {
-  id          Int     @id @default(autoincrement())
-  category        String
-  name        String?
-  shortDescription    String?
-  longDescription    String?
-  videoUrl    String
+  @@map("imageslider")
 }
 
-
-
-
+model videoslider {
+  id               Int     @id @default(autoincrement())
+  category         String
+  name             String?
+  shortDescription String?
+  longDescription  String?
+  videoUrl         String
+}
 
 enum Role {
   customer
