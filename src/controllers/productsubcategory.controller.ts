@@ -35,7 +35,9 @@ export const createSubCategory = async (req: Request, res: Response) => {
 // Get All subCategory
 export const getAllsubCategory = async (_req: Request, res: Response) => {
   try {
-    const subCategories = await prisma.subCategory.findMany();
+    const subCategories = await prisma.subCategory.findMany({
+    include: { category: true }, // <-- include related category
+  });
     res.json(subCategories);
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch subCategories." });
@@ -52,7 +54,8 @@ export const findSubCategoryByCategory = async (_req: Request, res: Response) =>
 
     if(_Category != null){ 
       const subCategories = await prisma.subCategory.findMany({
-        where:{categoryId: _Category?.id}
+        where:{categoryId: _Category?.id}, 
+        include: { category: true },  
       });
       res.json(subCategories);
     }else{ 
@@ -68,7 +71,8 @@ export const findSubCategoryByCategory = async (_req: Request, res: Response) =>
 export const findSubCategory = async (req: Request, res: Response) => {  
   try { 
     const subCategory = await prisma.subCategory.findUnique({
-      where: { id: parseInt(req.params.id)} 
+      where: { id: parseInt(req.params.id)} , 
+        include: { category: true },  
     });
     
     if (!subCategory) {
