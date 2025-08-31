@@ -5,10 +5,10 @@ import prisma from "../lib/prisma";
 
 // Create Product
 export const createSubCategory = async (req: Request, res: Response) => {
-  const { name, category} = req.body;
+  const { name, categoryId} = req.body;
   const user = req.user;
-  const categoryId = Number(category?.Id);
-     
+  const newCategoryId = Number(categoryId);
+     console.log(name, newCategoryId)
   if (!name) {
       console.warn(`Skipping subCategory ${name} due to missing data`); 
     
@@ -19,7 +19,7 @@ export const createSubCategory = async (req: Request, res: Response) => {
       const subCategory = await prisma.subCategory.create({
         data: {
           name,
-          categoryId, 
+          categoryId: newCategoryId, 
         } 
       });
 
@@ -91,7 +91,7 @@ export const findSubCategory = async (req: Request, res: Response) => {
 export const updateSubCategory = async (req: Request, res: Response) => {
   const { id } = req.params;
   const user = req.user;
-  const { name, description, price, stock } = req.body;
+  const { name } = req.body;
 
   try {
     const vendor = await prisma.vendor.findUnique({

@@ -21,3 +21,4 @@ router.delete("/:id", protect, deleteSubCategory);  // Delete product
 
 
 export default router;
+ 

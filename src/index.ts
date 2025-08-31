@@ -25,7 +25,7 @@ import adminRoutes from "./routes/admin.routes";
 import userRoutes from "./routes/user.routes";
 import vendorRoutes from "./routes/vendor.routes";
 import imageRoutes from "./routes/imageslider.routes";
-import videoRoutes from "./routes/videoslider.routes";
+import videoRoutes from "./routes/videoslider.routes"; 
 
 // ----------------------
 // Fallback Logger Setup
@@ -62,7 +62,7 @@ const BASE_URL = process.env.VITE_BASE_URL || `http://localhost:${PORT}`;
 // Static uploads folder
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 // Serve static files from public
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "public"))); 
 
 // CORS setup
 app.use(
@@ -96,11 +96,36 @@ app.get("/favicon.ico", (req, res) => {
 });
 
 // List slider images
-app.get("/api/images/slider", (_req, res) => {
-  const sliderPath = path.join(process.cwd(), "uploads/images/slider");
+app.get("/api/product/images/", (_req, res) => {
+  const sliderPath = path.join(process.cwd(), "uploads/products/images/");
   if (!fs.existsSync(sliderPath)) return res.json([]);
   const files = fs.readdirSync(sliderPath);
-  const urls = files.map((f) => `/uploads/images/slider/${f}`);
+  const urls = files.map((f) => `/uploads/products/images/${f}`);
+  res.json(urls);
+});
+app.get("/api/products/images/", (_req, res) => {
+  const sliderPath = path.join(process.cwd(), "uploads/products/images/");
+  if (!fs.existsSync(sliderPath)) return res.json([]);
+  const files = fs.readdirSync(sliderPath);
+  const urls = files.map((f) => `/uploads/products/images/${f}`);
+  res.json(urls);
+});
+
+// List all products
+app.get("/api/images/slider/images", (_req, res) => {
+  const sliderPath = path.join(process.cwd(), "uploads/images/slider/images");
+  if (!fs.existsSync(sliderPath)) return res.json([]);
+  const files = fs.readdirSync(sliderPath);
+  const urls = files.map((f) => `/uploads/images/slider/images/${f}`);
+  res.json(urls);
+});
+
+// List all users
+app.get("/api/users/images/", (_req, res) => {
+  const sliderPath = path.join(process.cwd(), "uploads/users/images/");
+  if (!fs.existsSync(sliderPath)) return res.json([]);
+  const files = fs.readdirSync(sliderPath);
+  const urls = files.map((f) => `/uploads/users/images/${f}`);
   res.json(urls);
 });
 
@@ -114,6 +139,8 @@ app.get("/api/images/logo", (_req, res) => {
 }); 
  
 // Routes
+//app.use(withUserContext);
+
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/users", userRoutes);

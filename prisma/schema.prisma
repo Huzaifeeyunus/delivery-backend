@@ -22,6 +22,8 @@ model User {
   orders       Order[]   @relation("CustomerOrders")
   deliveries   Order[]   @relation("DeliveryOrders")
   vendor       Vendor?
+  logReports   LogReport[]   // 👈 add this
+  
 
   @@map("user")
 }
@@ -43,6 +45,7 @@ model Vendor {
   orders        Order[]
   products      Product[]
   user          User      @relation(fields: [userId], references: [id])
+  logReports   LogReport[]   // 👈 add this
 
   @@map("vendor")
 }
@@ -88,6 +91,7 @@ model Product {
   videos          ProductVideo[]
   ratings         Rating[]
   reviews         Review[]
+  logReports   LogReport[]   // 👈 add this
 
   @@index([brandId], map: "product_brandId_fkey")
   @@index([categoryId], map: "product_categoryId_fkey")
@@ -309,6 +313,7 @@ model Order {
   items          OrderItem[]
   payment        Payment?
   transactions   Transaction[]
+  logReports   LogReport[]   // 👈 add this
 
   @@index([addressId], map: "order_addressId_fkey")
   @@index([customerId], map: "order_customerId_fkey")
@@ -398,7 +403,7 @@ model ImageSlider {
 
   @@map("imageslider")
 }
-
+ 
 model videoslider {
   id               Int     @id @default(autoincrement())
   category         String
@@ -407,6 +412,39 @@ model videoslider {
   longDescription  String?
   videoUrl         String
 }
+model GeneralLogReport {
+  id        Int      @id @default(autoincrement())
+  title     String
+  message   String
+  level     String   // e.g. "info", "warning", "error"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("generallogreport")
+}
+
+model LogReport {
+  id        Int      @id @default(autoincrement())
+  title     String
+  message   String
+  level     String   // e.g. "info", "warning", "error"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  userId    Int?     
+  orderId   Int?
+  productId Int?
+  vendorId  Int?
+
+  user      User?    @relation(fields: [userId], references: [id])
+  order     Order?   @relation(fields: [orderId], references: [id])
+  product   Product? @relation(fields: [productId], references: [id])
+  vendor    Vendor?  @relation(fields: [vendorId], references: [id])
+
+  @@map("logreport")
+}
+
 
 enum Role {
   customer

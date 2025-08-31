@@ -3,9 +3,11 @@
 // middleware/auth.ts
 import { Request, Response, NextFunction } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken"; 
-import { tokenBlacklist } from "../utils/tokenBlacklist";
+import { tokenBlacklist } from "../utils/tokenBlacklist";  
 
 const secret = process.env.JWT_SECRET || "your_jwt_secret";
+ 
+ 
 
 export const authenticate = (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;

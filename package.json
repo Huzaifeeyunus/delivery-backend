@@ -15,32 +15,31 @@
     "migrate:deploy": "prisma migrate deploy"
   },
   "dependencies": {
-  "@faker-js/faker": "^9.9.0",
-  "@prisma/client": "^6.15.0",
-  "axios": "^1.11.0",
-  "bcryptjs": "^3.0.2",
-  "cors": "^2.8.5",
-  "dotenv": "^17.2.1",
-  "express": "^5.1.0",
-  "haversine-distance": "^1.2.4",
-  "helmet": "^8.1.0",
-  "jsonwebtoken": "^9.0.2",
-  "multer": "^2.0.2",
-  "mysql2": "^3.14.3",
-  "prisma": "^6.15.0"       
-},
-"devDependencies": {
-  "@types/axios": "^0.9.36",
-  "@types/bcryptjs": "^2.4.6",
-  "@types/cors": "^2.8.19",
-  "@types/express": "^5.0.3",
-  "@types/helmet": "^0.0.48",
-  "@types/jsonwebtoken": "^9.0.10",
-  "@types/multer": "^2.0.0",
-  "@types/node": "^24.1.0",
-  "nodemon": "^3.1.10",
-  "ts-node": "^10.9.2",
-  "typescript": "^5.8.3"
-}
-
+    "@faker-js/faker": "^9.9.0",
+    "@prisma/client": "^6.15.0",
+    "axios": "^1.11.0",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "haversine-distance": "^1.2.4",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "mysql2": "^3.14.3",
+    "prisma": "^6.15.0"
+  },
+  "devDependencies": {
+    "@types/axios": "^0.9.36",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/helmet": "^0.0.48",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^24.1.0",
+    "nodemon": "^3.1.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
 }
