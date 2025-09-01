@@ -47,9 +47,27 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
 
 
 
-
-export const register = async (req: Request, res: Response) => {
-  const { name, email, password, phone, shopName,shopPhone,shopLocation, shopAddress } = req.body;
+ export const register = async (req: Request, res: Response) => {
+  const {
+    name,
+    email,
+    password,
+    phone,
+    shopName,
+    shopPhone,
+    shopLocation,
+    shopAddress,
+    licenseNumber,
+    vehicleType,
+    vehiclePlate,
+    agentAddress,
+          nationalId, 
+          dateOfBirth, 
+          emergencyContactName, 
+          emergencyContactPhone, 
+          region,
+    type = "customer", // default
+  } = req.body;
 
   try {
     // Check if user exists
@@ -57,11 +75,16 @@ export const register = async (req: Request, res: Response) => {
     if (existingUser) {
       return res.status(409).json({ message: "User already exists" });
     }
-    const role = "customer";
+
     // Hash password
     const passwordHash = await hashPassword(password);
 
-    // Create user
+    // Decide role
+    let role = "customer";
+    if (type === "vendor") role = "vendor";
+    if (type === "delivery") role = "delivery";
+
+    // Create user (vendors & delivery start as inactive)
     const user = await prisma.user.create({
       data: {
         name,
@@ -69,12 +92,12 @@ export const register = async (req: Request, res: Response) => {
         phone,
         role,
         passwordHash,
+        //isActive: role === "customer", // only customers active immediately
       },
     });
 
     // If vendor, create vendor profile
-    const vrole: string = "customer";
-    if (vrole === "vendor") {
+    if (role === "vendor") {
       if (!shopName || !shopAddress) {
         return res.status(400).json({ message: "Vendor must provide shop name and address" });
       }
@@ -86,20 +109,56 @@ export const register = async (req: Request, res: Response) => {
           shopPhone,
           shopLocation,
           shopAddress,
+          isActive: false, // pending admin approval
         },
       });
     }
 
-    const token = generateToken({ id: user.id, name: user.name, email: user.email, role: user.role });
+    // If delivery, create delivery profile
+    if (role === "delivery") {
+      if (!licenseNumber || !vehicleType || !vehiclePlate || !agentAddress) {
+        return res.status(400).json({ message: "Delivery agent must provide full details" });
+      }
+
+      await prisma.deliveryAgent.create({
+        data: {
+          userId: user.id,
+          licenseNumber,
+          vehicleType,
+          vehiclePlate,
+          agentAddress,
+          nationalId, 
+          dateOfBirth, 
+          emergencyContactName, 
+          emergencyContactPhone, 
+          region,
+          isActive: false, // pending admin approval
+        },
+      });
+    }
+
+    // Generate token (customers only; vendors & delivery must wait for approval)
+    const token =
+      role === "customer"
+        ? generateToken({
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+          })
+        : null;
 
     res.status(201).json({
-      message: "User registered successfully",
+      message:
+        role === "customer"
+          ? "User registered successfully"
+          : "Registration submitted, pending admin approval",
       token,
       user: {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role,
+        role: user.role, 
       },
     });
   } catch (error) {

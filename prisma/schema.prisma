@@ -7,33 +7,57 @@ datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
+// ==========================
+// Roles & Users
+// ==========================
+model Role {
+  id          Int      @id @default(autoincrement())
+  name        String      @unique
+  description String?
+  users       UserRole[]  // relation to UserRole join table
+  
+  @@map("role")
+}
+
+model UserRole {
+  id     Int    @id @default(autoincrement())
+  user   User   @relation(fields: [userId], references: [id])
+  userId Int
+  role   Role   @relation(fields: [roleId], references: [id])
+  roleId Int
+
+  @@unique([userId, roleId]) // prevent duplicate role for a user
+  @@map("userrole")
+}
 
 model User {
-  id           Int       @id @default(autoincrement())
+  id           Int        @id @default(autoincrement())
   name         String
-  email        String    @unique
+  email        String     @unique
   passwordHash String
   phone        String?
-  role         Role
-  createdAt    DateTime  @default(now())
+  gender        String?
+  role         String?
+  roles        UserRole[] // many-to-many through UserRole
+  createdAt    DateTime   @default(now())
   imageUrl     String?
   addresses    Address[]
-  Cart         Cart[]
-  orders       Order[]   @relation("CustomerOrders")
-  deliveries   Order[]   @relation("DeliveryOrders")
+  cart         Cart[]
+  orders       Order[]    @relation("CustomerOrders")
+  deliveries   Order[]    @relation("DeliveryOrders")
   vendor       Vendor?
-  logReports   LogReport[]   // 👈 add this
-  
+  deliveryAgent  DeliveryAgent?
+  logReports   LogReport[]  // added for logging
 
   @@map("user")
 }
 
 model Vendor {
-  id            Int       @id @default(autoincrement())
-  userId        Int       @unique
+  id            Int            @id @default(autoincrement())
+  userId        Int            @unique
   shopName      String
   shopAddress   String?
-  isActive      Boolean   @default(true)
+  isActive      Boolean        @default(true)
   shopEmail     String?
   shopLatitude  Float?
   shopLocation  String
@@ -41,13 +65,36 @@ model Vendor {
   shopOwner     String?
   shopPhone     String
   shopWebsite   String?
-  imageUrl      String?
   orders        Order[]
   products      Product[]
-  user          User      @relation(fields: [userId], references: [id])
-  logReports   LogReport[]   // 👈 add this
+  user          User           @relation(fields: [userId], references: [id])
+  images        VendorImage[]  // ✅ one-to-many relation
+  videos        VendorVideo[]  // ✅ one-to-many relation
+  logReports    LogReport[]    // ✅ existing relation
 
   @@map("vendor")
+}
+
+model VendorImage {
+  id       Int     @id @default(autoincrement())
+  url      String
+  alt      String?
+  vendorId Int
+  vendor   Vendor  @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId], map: "vendorimage_vendorId_fkey")
+  @@map("vendorimage")
+}
+
+model VendorVideo {
+  id       Int     @id @default(autoincrement())
+  url      String
+  caption  String?
+  vendorId Int
+  vendor   Vendor  @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId], map: "vendorvideo_vendorId_fkey")
+  @@map("vendorvideo")
 }
 
 model Product {
@@ -82,7 +129,7 @@ model Product {
   CartItem        CartItem[]
   orderItems      OrderItem[]
   brand           Brand?            @relation(fields: [brandId], references: [id])
-  category        Category         @relation(fields: [categoryId], references: [id])
+  category        Category          @relation(fields: [categoryId], references: [id])
   material        Material?         @relation(fields: [materialId], references: [id])
   origin          Origin?           @relation(fields: [originId], references: [id])
   subCategory     SubCategory?     @relation(fields: [subCategoryId], references: [id])
@@ -393,6 +440,34 @@ model Address {
   @@map("address")
 }
 
+model DeliveryAgent {
+  id             String   @id @default(uuid())
+  userId         Int   @unique
+  licenseNumber  String
+  nationalId     String           // e.g., Ghana Card, Passport, or SSNIT
+  vehicleType    String
+  vehiclePlate   String
+  vehicleColor   String?
+  agentAddress   String
+  dateOfBirth    DateTime
+  emergencyContactName   String
+  emergencyContactPhone  String
+  region         String           // operational region
+  gpsLocation    String?          // optional GPS / lat-long
+  profileImage   String?          // agent picture
+  idCardImage    String?          // scan/photo of ID
+  licenseImage   String?          // scan/photo of driver’s license
+  isActive       Boolean  @default(false)
+  isVerified     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relationship with User
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("deliveryagent")
+}
+
 model ImageSlider {
   id               Int     @id @default(autoincrement())
   category         String
@@ -446,7 +521,7 @@ model LogReport {
 }
 
 
-enum Role {
+enum RoleEnum {
   customer
   vendor
   delivery

@@ -124,7 +124,7 @@ export const viewAllPayments = async (req: Request, res: Response) => {
     if (!user) return res.status(403).json({ error: "Forbidden: Admins only" });
 
     const getUser = await prisma.user.findFirst({ where: { id: Number(user.id) } });
-    if (!getUser || !getUser.role.toString().startsWith("ADMIN"))
+    if (!getUser || !getUser.role?.toString().startsWith("ADMIN"))
       return res.status(403).json({ error: "Forbidden: Admins only" });
 
     const { status, customerId, fromDate, toDate } = req.query;

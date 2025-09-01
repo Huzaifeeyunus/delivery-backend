@@ -15,6 +15,7 @@ const router = express.Router();
   
 router.get("/", getOrderDetails); 
 router.get("/:orderId", getOrderDetails); 
+router.get("/all/admins/admin", getOrderDetails); 
 router.get("/user/:userId", getUserOrders);
 router.get("/me/current/customer/:userId", getCustomerOrders);
 router.get("/vendors/vendor/:vendorId", getVendorOrders);

@@ -1,114 +1,182 @@
-import { Request, Response } from "express"; 
-import prisma from "../lib/prisma"; 
-  
- 
-// Create Product 
+import { Request, Response } from "express";
+import prisma from "../lib/prisma";
+import fs from "fs";
+import path from "path";
+
+// Helper: get uploaded image URLs
+const getUploadedImages = (files: Express.Multer.File[] | undefined): string[] => {
+  if (!files || files.length === 0) return [];
+  return files.map(file => `/uploads/vendors/images/${file.filename}`);
+};
+
+// Helper: get uploaded video URLs
+const getUploadedVideos = (files: Express.Multer.File[] | undefined): string[] => {
+  if (!files || files.length === 0) return [];
+  return files.map(file => `/uploads/vendors/videos/${file.filename}`);
+};
+
+// -------------------- CREATE VENDOR --------------------
 export const createVendor = async (req: Request, res: Response) => {
-  const { shopName, shopPhone, shopLocation, shopLongitude, shopLatitude, 
-    shopAddress, shopEmail, shopWebsite, shopOwner, isActive} = req.body;
+  const { shopName, shopPhone, shopLocation, shopLongitude, shopLatitude,
+    shopAddress, shopEmail, shopWebsite, shopOwner, isActive } = req.body;
   const userId = Number(req.user?.id);
 
-     
-  if (!shopName) {
-      console.warn(`Skipping vendor ${shopName} due to missing data`); 
-    
-  }else{
-    try { 
- 
-      console.log(req.body)
-      const newIsActive: boolean = Boolean(isActive) || false
-      const vendor = await prisma.vendor.create({
-        data: {
-          userId,
-          shopName, shopPhone, shopLocation, shopLongitude, shopLatitude, 
-            shopAddress, shopEmail, shopWebsite, shopOwner, isActive: newIsActive, 
-        } 
-      });
+  if (!shopName) return res.status(400).json({ message: "Shop name is required." });
 
-      res.status(201).json(vendor);
-    } catch (err) {
-      console.log(err)
-      res.status(500).json({ message: "Failed to create vendor.", error: err });
+  try {
+    // ✅ Check if user already has a vendor
+    const existingVendor = await prisma.vendor.findUnique({ where: { userId } });
+    if (existingVendor) {
+      return res.status(400).json({ message: "You already have a vendor." });
     }
-  };
-}
 
+    // Get uploaded images and videos
+    const imageUrls = getUploadedImages(req.files as Express.Multer.File[]);
+    const videoUrls = getUploadedVideos(req.files as Express.Multer.File[]);
+    const newIsActive = Boolean(isActive) || false;
 
+    // Create vendor with nested images/videos
+    const vendor = await prisma.vendor.create({
+      data: {
+        userId,
+        shopName,
+        shopPhone,
+        shopLocation,
+        shopLongitude: shopLongitude ? Number(shopLongitude) : undefined,
+        shopLatitude: shopLatitude ? Number(shopLatitude) : undefined,
+        shopAddress,
+        shopEmail,
+        shopWebsite,
+        shopOwner,
+        isActive: newIsActive,
+        images: {
+          create: imageUrls.map(url => ({ url })),
+        },
+        videos: {
+          create: videoUrls.map(url => ({ url })),
+        },
+      },
+      include: {
+        images: true,
+        videos: true,
+      },
+    });
 
-// Get All vendors
+    res.status(201).json(vendor);
+  } catch (err) {
+    console.error("Create Vendor Error:", err);
+    res.status(500).json({ message: "Failed to create vendor.", error: err });
+  }
+};
+
+// -------------------- GET ALL VENDORS --------------------
 export const getAllVendor = async (_req: Request, res: Response) => {
   try {
-    const vendors = await prisma.vendor.findMany();
+    const vendors = await prisma.vendor.findMany({
+      include: { images: true, videos: true },
+    });
     res.json(vendors);
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch vendors." });
+    console.error("Get All Vendors Error:", err);
+    res.status(500).json({ message: "Failed to fetch vendors.", error: err });
   }
 };
 
-
-// Find A vendors
-export const findVendor = async (req: Request, res: Response) => {  
-  try { 
-    const vendor = await prisma.vendor.findUnique({
-      where: { id: parseInt(req.params.id)} 
-    });
-    
-    if (!vendor) {
-      return res.status(404).json({ error: "vendor not found" });
-    }
-    res.json(vendor);
-  } catch (err) {
-    res.status(500).json({ message: "Failed to fetch vendors." });
-  }
-};
-
-
-
-
-// Update vendor
-export const updateVendor = async (req: Request, res: Response) => { 
-  const { shopName, shopPhone, shopLocation, shopLongitude, shopLatitude, 
-    shopAddress, shopEmail, shopWebsite, shopOwner, isActive} = req.body;
-
-  const id = Number(req.params); 
-  const userId = Number(req.user);
-  const { name, description, price, stock } = req.body;
+// -------------------- GET VENDOR BY ID --------------------
+export const findVendor = async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
 
   try {
-    const _vendor = await prisma.vendor.findUnique({
+    const vendor = await prisma.vendor.findUnique({
       where: { id },
+      include: { images: true, videos: true },
     });
-
-    if (!_vendor) return res.status(403).json({ message: "Not a vendor." });
-
-    const updated_vendor = await prisma.vendor.update({
-      where: { id: id },
-      data: {  shopName, shopPhone, shopLocation, shopLongitude, shopLatitude, 
-                shopAddress, shopEmail, shopWebsite, shopOwner, isActive },
-    });
-
-    res.json(updated_vendor);
+    if (!vendor) return res.status(404).json({ message: "Vendor not found." });
+    res.json(vendor);
   } catch (err) {
+    console.error("Find Vendor Error:", err);
+    res.status(500).json({ message: "Failed to fetch vendor.", error: err });
+  }
+};
+
+// -------------------- UPDATE VENDOR --------------------
+ 
+// -------------------- UPDATE VENDOR --------------------
+export const updateVendor = async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const { shopName, shopPhone, shopLocation, shopLongitude, shopLatitude,
+    shopAddress, shopEmail, shopWebsite, shopOwner, isActive } = req.body;
+
+  try {
+    // Find existing vendor with images/videos
+    const existingVendor = await prisma.vendor.findUnique({
+      where: { id },
+      include: { images: true, videos: true },
+    });
+    if (!existingVendor) return res.status(404).json({ message: "Vendor not found." });
+
+    // Get newly uploaded images/videos
+    const newImageUrls = getUploadedImages(req.files as Express.Multer.File[]);
+    const newVideoUrls = getUploadedVideos(req.files as Express.Multer.File[]);
+
+    // Update vendor and create new nested images/videos
+    const updatedVendor = await prisma.vendor.update({
+      where: { id },
+      data: {
+        shopName,
+        shopPhone,
+        shopLocation,
+        shopLongitude: shopLongitude ? Number(shopLongitude) : undefined,
+        shopLatitude: shopLatitude ? Number(shopLatitude) : undefined,
+        shopAddress,
+        shopEmail,
+        shopWebsite,
+        shopOwner,
+        isActive: Boolean(isActive),
+        images: {
+          create: newImageUrls.map(url => ({ url })),
+        },
+        videos: {
+          create: newVideoUrls.map(url => ({ url })),
+        },
+      },
+      include: { images: true, videos: true },
+    });
+
+    res.json(updatedVendor);
+  } catch (err) {
+    console.error("Update Vendor Error:", err);
     res.status(500).json({ message: "Failed to update vendor.", error: err });
   }
 };
 
-// Delete vendor
+// -------------------- DELETE VENDOR --------------------
 export const deleteVendor = async (req: Request, res: Response) => {
-  const id = Number(req.params);
-  const userId = Number(req.user);
+  const id = Number(req.params.id);
 
   try {
-    const _vendor = await prisma.vendor.findUnique({
+    const vendor = await prisma.vendor.findUnique({
       where: { id },
+      include: { images: true, videos: true },
+    });
+    if (!vendor) return res.status(404).json({ message: "Vendor not found." });
+
+    // Delete images from disk
+    vendor.images.forEach((img: any) => {
+      const filePath = path.join(__dirname, "..", img.url);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     });
 
-    if (!_vendor) return res.status(403).json({ message: "Not a vendor." });
+    // Delete videos from disk
+    vendor.videos.forEach((video: any) => {
+      const filePath = path.join(__dirname, "..", video.url);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    });
 
-    await prisma.vendor.delete({ where: { id: id } });
-
-    res.json({ message: "vendor deleted." });
+    await prisma.vendor.delete({ where: { id } });
+    res.json({ message: "Vendor deleted." });
   } catch (err) {
-    res.status(500).json({ message: "Failed to delete vendor." });
+    console.error("Delete Vendor Error:", err);
+    res.status(500).json({ message: "Failed to delete vendor.", error: err });
   }
 };

@@ -2,41 +2,57 @@ import { Request, Response } from "express";
 import prisma from "../lib/prisma";  
 import bcrypt from "bcryptjs";
  
-
-// Create Product
+// Create User
 export const createUser = async (req: Request, res: Response) => {
   try {
-    const user = req.user;
-    if (!user) {
-      return res.status(400).json({ message: "Invalid user ID." });
+    const { name, email, passwordHash, phone, roleIds, imageUrl } = req.body;
+
+    // Validate input
+    if (!name || !email || !passwordHash) {
+      return res.status(400).json({ message: "Name, email and password are required." });
     }
- 
- 
 
-    const { name, email, passwordHash, phone, role, imageUrl } = req.body;
+    // Hash password
+    const hashedPassword = await bcrypt.hash(passwordHash, 10);
 
-    // Prepare update object
-    const updateData: any = {};
-    if (name) updateData.name = name;
-    if (email) updateData.email = email;
-    if (phone) updateData.phone = phone;
-    if (role) updateData.role = "customer";
-     updateData.role = "customer";
-    if (imageUrl) updateData.imageUrl = imageUrl;
+    // If no roleIds provided, default to "customer"
+    let finalRoleIds: string[] = [];
+    if (Array.isArray(roleIds) && roleIds.length > 0) {
+      finalRoleIds = roleIds;
+    } else {
+      // Look up the customer role from DB
+      const customerRole = await prisma.role.findUnique({
+        where: { name: "customer" },
+      });
 
-    // Hash password only if provided and changed
-      if (passwordHash && passwordHash.trim() !== "") {
-        const hashedPassword = await bcrypt.hash(passwordHash, 10);
-        updateData.passwordHash = hashedPassword;
-        console.log("Password changed")
+      if (!customerRole) {
+        return res.status(500).json({ message: "Default customer role not found." });
       }
-    const updatedUser = await prisma.user.create({ 
-      data: updateData,
+      finalRoleIds = [customerRole.id.toString()];
+    }
+
+    // Create user with roles
+    const newUser = await prisma.user.create({
+      data: {
+        name,
+        email,
+        passwordHash: hashedPassword,
+        phone,
+        imageUrl,
+        roles: {
+          create: finalRoleIds.map((roleId: any) => ({
+            role: { connect: { id: roleId } },
+          })),
+        },
+      },
+      include: {
+        roles: { include: { role: true } },
+      },
     });
 
     res.json({
       message: "User created successfully.",
-      user: updatedUser,
+      user: newUser,
     });
   } catch (err) {
     console.error("Error creating user:", err);
@@ -45,41 +61,59 @@ export const createUser = async (req: Request, res: Response) => {
       error: err instanceof Error ? err.message : err,
     });
   }
-}
+};
 
 
-
-// Get All users
+// Get All Users
 export const getAllUser = async (_req: Request, res: Response) => {
   try {
-    const users = await prisma.user.findMany();
+    const users = await prisma.user.findMany({
+      include: {
+        roles: {
+          include: { role: true }, // include role details
+        },
+      },
+    });
     res.json(users);
   } catch (err) {
+    console.error("Error fetching users:", err);
     res.status(500).json({ message: "Failed to fetch users." });
   }
 };
 
-
-// Find A users
-export const findUser = async (req: Request, res: Response) => {  
-  try { 
-    const user = await prisma.user.findUnique({
-      where: { id: parseInt(req.params.id)} 
-    });
-    
-    if (!user) {
-      return res.status(404).json({ error: "user not found" });
+// Find A User
+export const findUser = async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ error: "Invalid user ID" });
     }
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: {
+        roles: {
+          include: { role: true }, // include role details
+        },
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
     res.json(user);
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch users." });
+    console.error("Error fetching user:", err);
+    res.status(500).json({ message: "Failed to fetch user." });
   }
 };
 
 
 
 
-// Update user
+
+// Update user 
 export const updateUser = async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
@@ -89,35 +123,49 @@ export const updateUser = async (req: Request, res: Response) => {
 
     const existingUser = await prisma.user.findUnique({
       where: { id },
+      include: { roles: true }, // include roles for comparison
     });
 
     if (!existingUser) {
       return res.status(404).json({ message: "User not found." });
     }
 
-    const { name, email, passwordHash, phone, role, imageUrl } = req.body;
+    const { name, email, passwordHash, phone, roleIds, imageUrl } = req.body;
 
-    // Prepare update object
+    // Build update data
     const updateData: any = {};
     if (name) updateData.name = name;
     if (email) updateData.email = email;
     if (phone) updateData.phone = phone;
-    if (role) updateData.role = role;
     if (imageUrl) updateData.imageUrl = imageUrl;
 
-    // Hash password only if provided and changed
-    
-    if(!passwordHash.includes("$2b")){  
-      if (passwordHash && passwordHash.trim() !== "") {
-        const hashedPassword = await bcrypt.hash(passwordHash, 10);
-        updateData.passwordHash = hashedPassword;
-        console.log("Has changed__: ",updateData)
-      } 
+    // Handle password hashing 
+    if (passwordHash && passwordHash.trim() !== "") {
+      if (!passwordHash.startsWith("$2b$") && !passwordHash.startsWith("$2a$")) {
+        // plain text → hash it
+        updateData.passwordHash = await bcrypt.hash(passwordHash, 10);
+      } else {
+        // already hashed → keep as is
+        updateData.passwordHash = passwordHash;
+      }
     }
- 
-    const updatedUser = await prisma.user.update({
+
+    // Handle roles (many-to-many through UserRole)
+    if (Array.isArray(roleIds)) {
+      updateData.roles = {
+        deleteMany: {}, // remove all existing UserRole entries
+        create: roleIds.map((roleId: string) => ({
+          role: { connect: { id: roleId } },
+        })),
+      };
+    }
+
+      const updatedUser = await prisma.user.update({
       where: { id },
-      data: updateData,
+      data: updateData, // ✅ now using the built object
+      include: {
+        roles: { include: { role: true } },
+      },
     });
 
     res.json({
@@ -132,6 +180,7 @@ export const updateUser = async (req: Request, res: Response) => {
     });
   }
 };
+
 
 // Delete user
 export const deleteUser = async (req: Request, res: Response) => {

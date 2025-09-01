@@ -6,6 +6,7 @@ import cors from "cors";
 import helmet from "helmet";
 import dotenv from "dotenv";
 
+import logReportRoutes from "./routes/logreport.routes";
 import authRoutes from "./routes/auth.routes";
 import productRoutes from "./routes/product.routes";
 import categoriesRoutes from "./routes/category.routes";
@@ -23,6 +24,7 @@ import deliveryRoutes from "./routes/delivery.routes";
 import addressRoutes from "./routes/address.routes";
 import adminRoutes from "./routes/admin.routes";
 import userRoutes from "./routes/user.routes";
+import roleRoutes from "./routes/roles.routes";
 import vendorRoutes from "./routes/vendor.routes";
 import imageRoutes from "./routes/imageslider.routes";
 import videoRoutes from "./routes/videoslider.routes"; 
@@ -129,6 +131,14 @@ app.get("/api/users/images/", (_req, res) => {
   res.json(urls);
 });
 
+// List all vendors
+app.get("/api/vendors/images/", (_req, res) => {
+  const sliderPath = path.join(process.cwd(), "uploads/vendors/images/");
+  if (!fs.existsSync(sliderPath)) return res.json([]);
+  const files = fs.readdirSync(sliderPath);
+  const urls = files.map((f) => `/uploads/vendors/images/${f}`);
+  res.json(urls);
+});
 // List all logo
 app.get("/api/images/logo", (_req, res) => {
   const imagesPath = path.join(process.cwd(), "uploads/images/logo");
@@ -141,9 +151,11 @@ app.get("/api/images/logo", (_req, res) => {
 // Routes
 //app.use(withUserContext);
 
+app.use("/api/logreports", logReportRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/roles", roleRoutes);
 app.use("/api/vendors", vendorRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/categories", categoriesRoutes);

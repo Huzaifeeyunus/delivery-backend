@@ -29,7 +29,14 @@ export function createUploader() {
           subfolder = "users/others";
         }
       }
-
+      // --- User Uploads (avatars, profile images) ---
+      else if (req.baseUrl.includes("vendors")) {
+        if (file.mimetype.startsWith("image/")) {
+          subfolder = "vendors/images";
+        } else {
+          subfolder = "vendors/others";
+        }
+      }
       // --- Product Uploads (old logic, preserved) ---
       else {
         if (
