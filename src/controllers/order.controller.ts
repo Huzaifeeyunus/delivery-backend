@@ -26,7 +26,7 @@ export const initiatePayment = async (req: Request, res: Response) => {
         amount,
         status: "initiated",
         reference,
-        rawData: {}, // keep external gateway data later
+        rawData: JSON.stringify({}), // keep external gateway data later
       },
     });
 

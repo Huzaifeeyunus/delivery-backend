@@ -7,57 +7,56 @@ datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
-// ==========================
-// Roles & Users
-// ==========================
+
 model Role {
-  id          Int      @id @default(autoincrement())
-  name        String      @unique
+  id          Int        @id @default(autoincrement())
+  name        String     @unique
   description String?
-  users       UserRole[]  // relation to UserRole join table
-  
+  users       UserRole[]
+
   @@map("role")
 }
 
 model UserRole {
-  id     Int    @id @default(autoincrement())
-  user   User   @relation(fields: [userId], references: [id])
+  id     Int  @id @default(autoincrement())
   userId Int
-  role   Role   @relation(fields: [roleId], references: [id])
   roleId Int
+  role   Role @relation(fields: [roleId], references: [id])
+  user   User @relation(fields: [userId], references: [id])
 
-  @@unique([userId, roleId]) // prevent duplicate role for a user
+  @@unique([userId, roleId])
+  @@index([roleId], map: "userrole_roleId_fkey")
   @@map("userrole")
 }
 
 model User {
-  id           Int        @id @default(autoincrement())
-  name         String
-  email        String     @unique
-  passwordHash String
-  phone        String?
+  id            Int            @id @default(autoincrement())
+  name          String
+  email         String         @unique
+  passwordHash  String
+  phone         String?
+  createdAt     DateTime       @default(now())
+  imageUrl      String?
+  role          String?
   gender        String?
-  role         String?
-  roles        UserRole[] // many-to-many through UserRole
-  createdAt    DateTime   @default(now())
-  imageUrl     String?
-  addresses    Address[]
-  cart         Cart[]
-  orders       Order[]    @relation("CustomerOrders")
-  deliveries   Order[]    @relation("DeliveryOrders")
-  vendor       Vendor?
-  deliveryAgent  DeliveryAgent?
-  logReports   LogReport[]  // added for logging
+  addresses     Address[]
+  cart          Cart[]
+  deliveryAgent DeliveryAgent?
+  logReports    LogReport[]
+  orders        Order[]        @relation("CustomerOrders")
+  deliveries    Order[]        @relation("DeliveryOrders")
+  roles         UserRole[]
+  vendor        Vendor?
 
   @@map("user")
 }
 
 model Vendor {
-  id            Int            @id @default(autoincrement())
-  userId        Int            @unique
+  id            Int           @id @default(autoincrement())
+  userId        Int           @unique
   shopName      String
   shopAddress   String?
-  isActive      Boolean        @default(true)
+  isActive      Boolean       @default(true)
   shopEmail     String?
   shopLatitude  Float?
   shopLocation  String
@@ -65,12 +64,12 @@ model Vendor {
   shopOwner     String?
   shopPhone     String
   shopWebsite   String?
+  logReports    LogReport[]
   orders        Order[]
   products      Product[]
-  user          User           @relation(fields: [userId], references: [id])
-  images        VendorImage[]  // ✅ one-to-many relation
-  videos        VendorVideo[]  // ✅ one-to-many relation
-  logReports    LogReport[]    // ✅ existing relation
+  user          User          @relation(fields: [userId], references: [id])
+  images        VendorImage[]
+  videos        VendorVideo[]
 
   @@map("vendor")
 }
@@ -102,7 +101,7 @@ model Product {
   vendorId        Int
   name            String
   description     String
-  price           Float?             
+  price           Float?
   available       Boolean          @default(true)
   createdAt       DateTime         @default(now())
   SKU             String?
@@ -114,7 +113,7 @@ model Product {
   currency        String           @default("GHS")
   dimensions      String?
   discountPrice   Float?
-  features        Json?
+  features        String?          @db.LongText
   isApproved      Boolean          @default(false)
   isFeatured      Boolean          @default(false)
   longDescription String?
@@ -127,18 +126,18 @@ model Product {
   originId        Int?
   tag             String?
   CartItem        CartItem[]
+  logReports      LogReport[]
   orderItems      OrderItem[]
-  brand           Brand?            @relation(fields: [brandId], references: [id])
-  category        Category          @relation(fields: [categoryId], references: [id])
-  material        Material?         @relation(fields: [materialId], references: [id])
-  origin          Origin?           @relation(fields: [originId], references: [id])
+  brand           Brand?           @relation(fields: [brandId], references: [id])
+  category        Category         @relation(fields: [categoryId], references: [id])
+  material        Material?        @relation(fields: [materialId], references: [id])
+  origin          Origin?          @relation(fields: [originId], references: [id])
   subCategory     SubCategory?     @relation(fields: [subCategoryId], references: [id])
   vendor          Vendor           @relation(fields: [vendorId], references: [id])
   variants        ProductVariant[]
   videos          ProductVideo[]
   ratings         Rating[]
   reviews         Review[]
-  logReports   LogReport[]   // 👈 add this
 
   @@index([brandId], map: "product_brandId_fkey")
   @@index([categoryId], map: "product_categoryId_fkey")
@@ -306,7 +305,7 @@ model Transaction {
   status    String
   method    String
   reference String
-  rawData   Json?
+  rawData   String?  @db.LongText
   createdAt DateTime @default(now())
   payment   Payment?
   order     Order?   @relation(fields: [orderId], references: [id])
@@ -331,7 +330,7 @@ model Delivery {
 model Order {
   id             Int            @id @default(autoincrement())
   customerId     Int
-  vendorId       Int           
+  vendorId       Int?
   deliveryId     Int?
   status         OrderStatus    @default(pending)
   totalAmount    Float
@@ -353,14 +352,14 @@ model Order {
   shippingFee    Float          @default(0)
   subtotal       Float
   Delivery       Delivery?
+  logReports     LogReport[]
   address        Address?       @relation(fields: [addressId], references: [id])
   customer       User           @relation("CustomerOrders", fields: [customerId], references: [id])
   delivery       User?          @relation("DeliveryOrders", fields: [deliveryId], references: [id])
-  vendor         Vendor        @relation(fields: [vendorId], references: [id])
+  vendor         Vendor?        @relation(fields: [vendorId], references: [id])
   items          OrderItem[]
   payment        Payment?
   transactions   Transaction[]
-  logReports   LogReport[]   // 👈 add this
 
   @@index([addressId], map: "order_addressId_fkey")
   @@index([customerId], map: "order_customerId_fkey")
@@ -441,29 +440,27 @@ model Address {
 }
 
 model DeliveryAgent {
-  id             String   @id @default(uuid())
-  userId         Int   @unique
-  licenseNumber  String
-  nationalId     String           // e.g., Ghana Card, Passport, or SSNIT
-  vehicleType    String
-  vehiclePlate   String
-  vehicleColor   String?
-  agentAddress   String
-  dateOfBirth    DateTime
-  emergencyContactName   String
-  emergencyContactPhone  String
-  region         String           // operational region
-  gpsLocation    String?          // optional GPS / lat-long
-  profileImage   String?          // agent picture
-  idCardImage    String?          // scan/photo of ID
-  licenseImage   String?          // scan/photo of driver’s license
-  isActive       Boolean  @default(false)
-  isVerified     Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  // Relationship with User
-  user User @relation(fields: [userId], references: [id])
+  id                    String   @id @default(uuid())
+  userId                Int      @unique
+  licenseNumber         String
+  nationalId            String
+  vehicleType           String
+  vehiclePlate          String
+  vehicleColor          String?
+  agentAddress          String
+  dateOfBirth           DateTime
+  emergencyContactName  String
+  emergencyContactPhone String
+  region                String
+  gpsLocation           String?
+  profileImage          String?
+  idCardImage           String?
+  licenseImage          String?
+  isActive              Boolean  @default(false)
+  isVerified            Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  user                  User     @relation(fields: [userId], references: [id])
 
   @@map("deliveryagent")
 }
@@ -478,89 +475,85 @@ model ImageSlider {
 
   @@map("imageslider")
 }
- 
-model videoslider {
+
+model VideoSlider {
   id               Int     @id @default(autoincrement())
   category         String
   name             String?
   shortDescription String?
   longDescription  String?
   videoUrl         String
+
+  @@map("videoslider")
 }
+
 model GeneralLogReport {
   id        Int      @id @default(autoincrement())
   title     String
   message   String
-  level     String   // e.g. "info", "warning", "error"
+  level     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("generallogreport")
 }
 
-model PublicPage {
-  id          Int                @id @default(autoincrement())
-  slug        String             @unique  // "home", "about", "pricing", etc.
-  title       String
-  description String
-
-  // Placement flags
-  showInHeader Boolean           @default(false)
-  showInFooter Boolean           @default(false)
-  isVisible    Boolean           @default(true)
-
-  // Relations
-  origins     PublicPageOrigin[]
-}
-
-
-model PublicPageOrigin {
-  id          Int           @id @default(autoincrement())
-  title       String
-  description String
-  publicPageId Int
-  publicPage   PublicPage   @relation(fields: [publicPageId], references: [id])
-
-  images       PublicOriginImage[]
-}
-
-model PublicOriginImage {
-  id          Int         @id @default(autoincrement())
-  imageUrl    String
-  pageOriginId Int
-  pageOrigin   PublicPageOrigin @relation(fields: [pageOriginId], references: [id])
-}
-
-
-
 model LogReport {
   id        Int      @id @default(autoincrement())
   title     String
   message   String
-  level     String   // e.g. "info", "warning", "error"
+  level     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  // Relations
-  userId    Int?     
   orderId   Int?
   productId Int?
+  userId    Int?
   vendorId  Int?
-
-  user      User?    @relation(fields: [userId], references: [id])
   order     Order?   @relation(fields: [orderId], references: [id])
   product   Product? @relation(fields: [productId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id])
   vendor    Vendor?  @relation(fields: [vendorId], references: [id])
 
+  @@index([orderId], map: "logreport_orderId_fkey")
+  @@index([productId], map: "logreport_productId_fkey")
+  @@index([userId], map: "logreport_userId_fkey")
+  @@index([vendorId], map: "logreport_vendorId_fkey")
   @@map("logreport")
 }
 
+model OriginImage {
+  id           Int        @id @default(autoincrement())
+  imageUrl     String
+  pageOriginId Int
+  PageOrigin   PageOrigin @relation(fields: [pageOriginId], references: [id])
 
-enum RoleEnum {
-  customer
-  vendor
-  delivery
-  admin
+  @@index([pageOriginId], map: "OriginImage_pageOriginId_fkey")
+  @@map("originimage")
+}
+
+model PageOrigin {
+  id           Int           @id @default(autoincrement())
+  title        String
+  description  String
+  publicPageId Int
+  OriginImage  OriginImage[]
+  PublicPage   PublicPage    @relation(fields: [publicPageId], references: [id])
+
+  @@index([publicPageId], map: "PageOrigin_publicPageId_fkey")
+  @@map("pageorigin")
+}
+
+model PublicPage {
+  id           Int          @id @default(autoincrement())
+  slug         String       @unique
+  title        String
+  description  String
+  showInHeader Boolean
+  showInFooter Boolean
+  isVisible    Boolean
+  PageOrigin   PageOrigin[]
+
+  @@map("publicpage")
 }
 
 enum OrderStatus {

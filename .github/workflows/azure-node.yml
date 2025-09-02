@@ -30,9 +30,9 @@ jobs:
 
       # Step 4b: Run Prisma migrations
       - name: Run Prisma migrations
-        run: npx prisma migrate deploy
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+         run: npx prisma migrate deploy
+         env:
+           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       # Step 5: Build TypeScript
       - name: Build TypeScript

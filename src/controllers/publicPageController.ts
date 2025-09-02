@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 // Get all pages
 export const getPages = async (req: Request, res: Response) => {
   const pages = await prisma.publicPage.findMany({
-    include: { origins: { include: { images: true } } },
+    include: { PageOrigin: { include: { OriginImage: true } } },
   });
   res.json(pages);
 };
@@ -16,7 +16,7 @@ export const getPageBySlug = async (req: Request, res: Response) => {
   const { slug } = req.params;
   const page = await prisma.publicPage.findUnique({
     where: { slug },
-    include: { origins: { include: { images: true } } },
+    include: { PageOrigin: { include: { OriginImage: true } } },
   });
   if (!page) return res.status(404).json({ error: "Page not found" });
   res.json(page);
@@ -48,3 +48,5 @@ export const deletePage = async (req: Request, res: Response) => {
   await prisma.publicPage.delete({ where: { id: Number(id) } });
   res.json({ message: "Page deleted" });
 };
+
+ 
