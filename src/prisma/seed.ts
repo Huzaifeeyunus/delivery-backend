@@ -1,3 +1,82 @@
+
+
+import prisma from "../lib/prisma";  
+
+async function main() {
+  await prisma.publicPage.createMany({
+    data: [
+      { 
+        slug: "home", 
+        title: "Welcome to Our Site", 
+        description: "Landing page content",
+        showInHeader: true,
+        showInFooter: false,
+        isVisible: true
+      },
+      { 
+        slug: "about", 
+        title: "About Us", 
+        description: "Who we are and what we do",
+        showInHeader: true,
+        showInFooter: true,
+        isVisible: true
+      },
+      { 
+        slug: "companies", 
+        title: "Companies Plans", 
+        description: "We allow registration from all vendors around the globe",
+        showInHeader: true,
+        showInFooter: false,
+        isVisible: true
+      },
+      { 
+        slug: "pricing", 
+        title: "Pricing Plans", 
+        description: "Our affordable packages",
+        showInHeader: true,
+        showInFooter: true,
+        isVisible: true
+      },
+      { 
+        slug: "contact", 
+        title: "Contact Us", 
+        description: "Get in touch with us",
+        showInHeader: false,
+        showInFooter: true,
+        isVisible: true
+      },
+      { 
+        slug: "blog", 
+        title: "Blog", 
+        description: "Latest updates and articles",
+        showInHeader: true,
+        showInFooter: true,
+        isVisible: true
+      },
+    ],
+    skipDuplicates: true,
+  });
+}
+
+main()
+  .then(async () => {
+    await prisma.$disconnect();
+  })
+  .catch(async (e) => {
+    console.error(e);
+    await prisma.$disconnect();
+    process.exit(1);
+  });
+
+
+
+
+
+
+
+
+
+
 /*  
 
 import prisma from "../lib/prisma";

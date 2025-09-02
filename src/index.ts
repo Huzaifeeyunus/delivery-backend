@@ -28,6 +28,7 @@ import roleRoutes from "./routes/roles.routes";
 import vendorRoutes from "./routes/vendor.routes";
 import imageRoutes from "./routes/imageslider.routes";
 import videoRoutes from "./routes/videoslider.routes"; 
+import publicPageRoutes from "./routes/publicPageRoutes";
 
 // ----------------------
 // Fallback Logger Setup
@@ -173,6 +174,10 @@ app.use("/api/deliveries", deliveryRoutes);
 app.use("/api/addresses", addressRoutes);
 app.use("/api/imagesliders", imageRoutes);
 app.use("/api/videosliders", videoRoutes);
+
+app.use("/api/public-pages", publicPageRoutes);
+
+
 
 // Start server
 app.listen(PORT, () => {

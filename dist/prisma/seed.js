@@ -1,4 +1,31 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const prisma_1 = __importDefault(require("../lib/prisma"));
+async function main() {
+    await prisma_1.default.publicPage.createMany({
+        data: [
+            { slug: "home", title: "Welcome to Our Site", description: "Landing page content" },
+            { slug: "about", title: "About Us", description: "Who we are and what we do" },
+            { slug: "companies", title: "Companies Plans", description: "We allow registration from all vendors around the globe" },
+            { slug: "pricing", title: "Pricing Plans", description: "Our affordable packages" },
+            { slug: "contact", title: "Contact Us", description: "Get in touch with us" },
+            { slug: "blog", title: "Blog", description: "Latest updates and articles" },
+        ],
+        skipDuplicates: true,
+    });
+}
+main()
+    .then(async () => {
+    await prisma_1.default.$disconnect();
+})
+    .catch(async (e) => {
+    console.error(e);
+    await prisma_1.default.$disconnect();
+    process.exit(1);
+});
 /*
 
 import prisma from "../lib/prisma";

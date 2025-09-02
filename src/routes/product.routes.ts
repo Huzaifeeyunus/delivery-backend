@@ -12,6 +12,7 @@ import {
   updateProductVideo,
   updateProductWithImage,
   deleteProduct,
+  deleteProductVariant,
 } from "../controllers/product.controller";
 import { protect } from "../controllers/auth.controller";
 import { createUploader } from "../middlewares/upload.middleware";
@@ -34,6 +35,7 @@ router.put("/:id", protect, updateProduct);     // Update product
 router.put("/with-image/:id", protect, uploader.any(), updateProductWithImage);     // Update product
 router.put("/image/:id", protect, uploader.any(), updateProductImage);     // Update product
 router.put("/video/:id", protect, uploader.any(), updateProductVideo);     // Update product
-router.delete("/:id", protect, deleteProduct);  // Delete product
+router.delete("/product/:id", protect, deleteProduct);  // Delete product
+router.delete("/variant/:id", protect, deleteProductVariant);  // Delete product
 
 export default router;

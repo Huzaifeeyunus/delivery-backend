@@ -701,9 +701,9 @@ const updateProduct = async (req, res) => {
     }
 };
 exports.updateProduct = updateProduct;
-// Delete Product
+// Delete Product and all related records
 const deleteProduct = async (req, res) => {
-    const id = req.params.id;
+    const id = parseInt(req.params.id);
     const user = req.user;
     try {
         const vendor = await prisma_1.default.vendor.findUnique({
@@ -714,13 +714,34 @@ const deleteProduct = async (req, res) => {
                 return res.status(403).json({ message: "Not a vendor." });
             }
         }
-        await prisma_1.default.productImage.deleteMany({ where: { productVariantId: parseInt(id) } });
-        await prisma_1.default.productVariant.deleteMany({ where: { productId: parseInt(id) } });
-        await prisma_1.default.product.delete({ where: { id: parseInt(id) } });
-        res.json({ message: "Product deleted." });
+        // 1️⃣ Find all variants of this product
+        const variants = await prisma_1.default.productVariant.findMany({
+            where: { productId: id },
+            select: { id: true },
+        });
+        const variantIds = variants.map(v => v.id);
+        // 2️⃣ Delete all product images for these variants
+        if (variantIds.length > 0) {
+            await prisma_1.default.productImage.deleteMany({
+                where: { productVariantId: { in: variantIds } },
+            });
+        }
+        // 3️⃣ Delete all variants
+        await prisma_1.default.productVariant.deleteMany({
+            where: { productId: id },
+        });
+        // 4️⃣ Delete ratings and reviews
+        await prisma_1.default.rating.deleteMany({ where: { productId: id } });
+        await prisma_1.default.review.deleteMany({ where: { productId: id } });
+        // 5️⃣ Delete cart items and order items referencing this product
+        await prisma_1.default.cartItem.deleteMany({ where: { productId: id } });
+        await prisma_1.default.orderItem.deleteMany({ where: { productId: id } });
+        // 6️⃣ Finally delete the product itself
+        await prisma_1.default.product.delete({ where: { id } });
+        res.json({ message: "Product and all related data deleted successfully." });
     }
     catch (err) {
-        console.error("Error update product:", err);
+        console.error("Error deleting product:", err);
         res.status(500).json({ message: "Failed to delete product." });
     }
 };

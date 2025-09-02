@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.refundOrder = exports.handlePaymentFailure = exports.markOrderAsPaid = exports.updateDeliveryStatus = exports.updatePaymentStatus = exports.updateOrderStatus = exports.getVendorOrders = exports.getUserOrders = exports.getCustomerOrders = exports.paidOrders = exports.getOrderDetails = exports.placeOrder = exports.initiatePayment = void 0;
+exports.refundOrder = exports.handlePaymentFailure = exports.markOrderAsPaid = exports.updateDeliveryStatus = exports.updatePaymentStatus = exports.updateOrderStatus = exports.getVendorOrders = exports.getUserOrders = exports.getAllOrders = exports.getCustomerOrders = exports.paidOrders = exports.getOrderDetails = exports.placeOrder = exports.initiatePayment = void 0;
 const prisma_1 = __importDefault(require("../lib/prisma"));
 // src/controllers/checkout.controller.ts 
 // POST /api/payments/initiate
@@ -171,6 +171,34 @@ const getCustomerOrders = async (req, res) => {
     }
 };
 exports.getCustomerOrders = getCustomerOrders;
+// Get all orders for a customer (user)
+const getAllOrders = async (req, res) => {
+    try {
+        const orders = await prisma_1.default.order.findMany({
+            include: {
+                items: {
+                    include: {
+                        product: true,
+                    },
+                },
+                customer: true,
+                payment: true,
+                delivery: true,
+                vendor: true,
+                transactions: true,
+            },
+            orderBy: {
+                placedAt: "desc",
+            },
+        });
+        return res.status(200).json(orders);
+    }
+    catch (error) {
+        console.error("❌ Failed to fetch user orders:", error);
+        return res.status(500).json({ error: "Internal server error" });
+    }
+};
+exports.getAllOrders = getAllOrders;
 // Get all orders for a customer (user)
 const getUserOrders = async (req, res) => {
     const userId = parseInt(req.params.userId);

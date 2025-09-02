@@ -9,6 +9,7 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const dotenv_1 = __importDefault(require("dotenv"));
+const logreport_routes_1 = __importDefault(require("./routes/logreport.routes"));
 const auth_routes_1 = __importDefault(require("./routes/auth.routes"));
 const product_routes_1 = __importDefault(require("./routes/product.routes"));
 const category_routes_1 = __importDefault(require("./routes/category.routes"));
@@ -26,9 +27,11 @@ const delivery_routes_1 = __importDefault(require("./routes/delivery.routes"));
 const address_routes_1 = __importDefault(require("./routes/address.routes"));
 const admin_routes_1 = __importDefault(require("./routes/admin.routes"));
 const user_routes_1 = __importDefault(require("./routes/user.routes"));
+const roles_routes_1 = __importDefault(require("./routes/roles.routes"));
 const vendor_routes_1 = __importDefault(require("./routes/vendor.routes"));
 const imageslider_routes_1 = __importDefault(require("./routes/imageslider.routes"));
 const videoslider_routes_1 = __importDefault(require("./routes/videoslider.routes"));
+const publicPageRoutes_1 = __importDefault(require("./routes/publicPageRoutes"));
 // ----------------------
 // Fallback Logger Setup
 // ----------------------
@@ -85,12 +88,47 @@ app.get("/favicon.ico", (req, res) => {
     res.sendFile(path_1.default.join(__dirname, "public", "favicon.ico"));
 });
 // List slider images
-app.get("/api/images/slider", (_req, res) => {
-    const sliderPath = path_1.default.join(process.cwd(), "uploads/images/slider");
+app.get("/api/product/images/", (_req, res) => {
+    const sliderPath = path_1.default.join(process.cwd(), "uploads/products/images/");
     if (!fs_1.default.existsSync(sliderPath))
         return res.json([]);
     const files = fs_1.default.readdirSync(sliderPath);
-    const urls = files.map((f) => `/uploads/images/slider/${f}`);
+    const urls = files.map((f) => `/uploads/products/images/${f}`);
+    res.json(urls);
+});
+app.get("/api/products/images/", (_req, res) => {
+    const sliderPath = path_1.default.join(process.cwd(), "uploads/products/images/");
+    if (!fs_1.default.existsSync(sliderPath))
+        return res.json([]);
+    const files = fs_1.default.readdirSync(sliderPath);
+    const urls = files.map((f) => `/uploads/products/images/${f}`);
+    res.json(urls);
+});
+// List all products
+app.get("/api/images/slider/images", (_req, res) => {
+    const sliderPath = path_1.default.join(process.cwd(), "uploads/images/slider/images");
+    if (!fs_1.default.existsSync(sliderPath))
+        return res.json([]);
+    const files = fs_1.default.readdirSync(sliderPath);
+    const urls = files.map((f) => `/uploads/images/slider/images/${f}`);
+    res.json(urls);
+});
+// List all users
+app.get("/api/users/images/", (_req, res) => {
+    const sliderPath = path_1.default.join(process.cwd(), "uploads/users/images/");
+    if (!fs_1.default.existsSync(sliderPath))
+        return res.json([]);
+    const files = fs_1.default.readdirSync(sliderPath);
+    const urls = files.map((f) => `/uploads/users/images/${f}`);
+    res.json(urls);
+});
+// List all vendors
+app.get("/api/vendors/images/", (_req, res) => {
+    const sliderPath = path_1.default.join(process.cwd(), "uploads/vendors/images/");
+    if (!fs_1.default.existsSync(sliderPath))
+        return res.json([]);
+    const files = fs_1.default.readdirSync(sliderPath);
+    const urls = files.map((f) => `/uploads/vendors/images/${f}`);
     res.json(urls);
 });
 // List all logo
@@ -103,9 +141,12 @@ app.get("/api/images/logo", (_req, res) => {
     res.json(urls);
 });
 // Routes
+//app.use(withUserContext);
+app.use("/api/logreports", logreport_routes_1.default);
 app.use("/api/auth", auth_routes_1.default);
 app.use("/api/admin", admin_routes_1.default);
 app.use("/api/users", user_routes_1.default);
+app.use("/api/roles", roles_routes_1.default);
 app.use("/api/vendors", vendor_routes_1.default);
 app.use("/api/products", product_routes_1.default);
 app.use("/api/categories", category_routes_1.default);
@@ -123,6 +164,7 @@ app.use("/api/deliveries", delivery_routes_1.default);
 app.use("/api/addresses", address_routes_1.default);
 app.use("/api/imagesliders", imageslider_routes_1.default);
 app.use("/api/videosliders", videoslider_routes_1.default);
+app.use("/api/public-pages", publicPageRoutes_1.default);
 // Start server
 app.listen(PORT, () => {
     console.log(`🚀 Server listening on port ${PORT}`);

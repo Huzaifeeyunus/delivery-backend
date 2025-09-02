@@ -199,6 +199,37 @@ export const getCustomerOrders = async (req: Request, res: Response) => {
 
 
 // Get all orders for a customer (user)
+export const getAllOrders = async (req: Request, res: Response) => { 
+ 
+
+  try {
+    const orders = await prisma.order.findMany({ 
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+        customer: true,
+        payment: true,
+        delivery: true,
+        vendor: true,
+        transactions: true,
+      },
+      orderBy: {
+        placedAt: "desc",
+      },
+    });
+
+    return res.status(200).json(orders);
+  } catch (error) {
+    console.error("❌ Failed to fetch user orders:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+
+// Get all orders for a customer (user)
 export const getUserOrders = async (req: Request, res: Response) => {
   const userId = parseInt(req.params.userId);
 
@@ -207,7 +238,7 @@ export const getUserOrders = async (req: Request, res: Response) => {
   }
 
   try {
-    const orders = await prisma.order.findMany({
+    const orders = await prisma.order.findMany({ 
       where: { customerId: userId },
       include: {
         items: {

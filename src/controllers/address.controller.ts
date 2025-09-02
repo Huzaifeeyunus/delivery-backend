@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import prisma  from "../lib/prisma";
+import { log } from "console";
 
 // Create a new address
 export const createAddress = async (req: Request, res: Response) => {
@@ -109,17 +110,17 @@ export const setDefaultAddress = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Address not found" });
     }
 
-    const isDefault = req.body;
+    //const _isDefault = req.body; 
     // Reset all user's addresses to isDefault = false
     await prisma.address.updateMany({
       where: { userId },
       data: { isDefault: false },
     });
 
-    // Set chosen address as default
+    // Set chosen address as default 
     const updatedAddress = await prisma.address.update({
       where: { id: addressId },
-      data: { isDefault },
+      data: { isDefault:  true},
     });
 
     res.json({

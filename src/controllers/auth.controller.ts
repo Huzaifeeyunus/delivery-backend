@@ -8,12 +8,13 @@ import { generateToken, signToken } from "../utils/jwt";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken"; 
 import { log } from "console";
+import { Role } from "@prisma/client";
 
 
 declare global {
   namespace Express {
     interface Request {
-      user?: { id: number; email: string; }; // extend as needed
+      user?: { id: number; email: string; role: Role }; // extend as needed
     }
   }
 }
@@ -180,7 +181,7 @@ export const login = async (req: Request, res: Response) => {
     return res.status(400).json({ message: "Email and password are required." });
   }
 
-  const loginuser = await prisma.user.findUnique({ where: { email } });
+  const loginuser = await prisma.user.findUnique({ where: { email }, include: {roles: true} });
 
   if (!loginuser) {
     return res.status(401).json({ message: "Invalid email or password." });
@@ -192,7 +193,8 @@ export const login = async (req: Request, res: Response) => {
     return res.status(401).json({ message: "Invalid email or password." });
   }
 
-  const token = jwt.sign({ id: loginuser.id, name: loginuser.name, email: loginuser.email, role: loginuser.role }, process.env.JWT_SECRET!, {
+   const roles = await prisma.role.findUnique({where: {id: loginuser.roles?.[0].roleId}});
+  const token = jwt.sign({ id: loginuser.id, name: loginuser.name, email: loginuser.email, role:  roles}, process.env.JWT_SECRET!, {
     expiresIn: "1h",
   });
 
@@ -202,7 +204,7 @@ export const login = async (req: Request, res: Response) => {
       id: loginuser.id,
       name: loginuser.name,
       email: loginuser.email,
-      role: loginuser.role,
+      role: roles,
     },
   });
 };

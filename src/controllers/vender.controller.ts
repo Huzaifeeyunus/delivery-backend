@@ -73,7 +73,7 @@ export const createVendor = async (req: Request, res: Response) => {
 export const getAllVendor = async (_req: Request, res: Response) => {
   try {
     const vendors = await prisma.vendor.findMany({
-      include: { images: true, videos: true },
+      include: { images: true, videos: true, orders: true },
     });
     res.json(vendors);
   } catch (err) {
@@ -89,7 +89,7 @@ export const findVendor = async (req: Request, res: Response) => {
   try {
     const vendor = await prisma.vendor.findUnique({
       where: { id },
-      include: { images: true, videos: true },
+      include: { images: true, videos: true, orders: true },
     });
     if (!vendor) return res.status(404).json({ message: "Vendor not found." });
     res.json(vendor);

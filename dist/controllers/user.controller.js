@@ -6,39 +6,52 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteUser = exports.updateUser = exports.findUser = exports.getAllUser = exports.createUser = void 0;
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
-// Create Product
+// Create User
 const createUser = async (req, res) => {
     try {
-        const user = req.user;
-        if (!user) {
-            return res.status(400).json({ message: "Invalid user ID." });
+        const { name, email, passwordHash, phone, roleIds, imageUrl } = req.body;
+        // Validate input
+        if (!name || !email || !passwordHash) {
+            return res.status(400).json({ message: "Name, email and password are required." });
         }
-        const { name, email, passwordHash, phone, role, imageUrl } = req.body;
-        // Prepare update object
-        const updateData = {};
-        if (name)
-            updateData.name = name;
-        if (email)
-            updateData.email = email;
-        if (phone)
-            updateData.phone = phone;
-        if (role)
-            updateData.role = "customer";
-        updateData.role = "customer";
-        if (imageUrl)
-            updateData.imageUrl = imageUrl;
-        // Hash password only if provided and changed
-        if (passwordHash && passwordHash.trim() !== "") {
-            const hashedPassword = await bcryptjs_1.default.hash(passwordHash, 10);
-            updateData.passwordHash = hashedPassword;
-            console.log("Password changed");
+        // Hash password
+        const hashedPassword = await bcryptjs_1.default.hash(passwordHash, 10);
+        // If no roleIds provided, default to "customer"
+        let finalRoleIds = [];
+        if (Array.isArray(roleIds) && roleIds.length > 0) {
+            finalRoleIds = roleIds;
         }
-        const updatedUser = await prisma_1.default.user.create({
-            data: updateData,
+        else {
+            // Look up the customer role from DB
+            const customerRole = await prisma_1.default.role.findUnique({
+                where: { name: "customer" },
+            });
+            if (!customerRole) {
+                return res.status(500).json({ message: "Default customer role not found." });
+            }
+            finalRoleIds = [customerRole.id.toString()];
+        }
+        // Create user with roles
+        const newUser = await prisma_1.default.user.create({
+            data: {
+                name,
+                email,
+                passwordHash: hashedPassword,
+                phone,
+                imageUrl,
+                roles: {
+                    create: finalRoleIds.map((roleId) => ({
+                        role: { connect: { id: roleId } },
+                    })),
+                },
+            },
+            include: {
+                roles: { include: { role: true } },
+            },
         });
         res.json({
             message: "User created successfully.",
-            user: updatedUser,
+            user: newUser,
         });
     }
     catch (err) {
@@ -50,34 +63,51 @@ const createUser = async (req, res) => {
     }
 };
 exports.createUser = createUser;
-// Get All users
+// Get All Users
 const getAllUser = async (_req, res) => {
     try {
-        const users = await prisma_1.default.user.findMany();
+        const users = await prisma_1.default.user.findMany({
+            include: {
+                roles: {
+                    include: { role: true }, // include role details
+                },
+            },
+        });
         res.json(users);
     }
     catch (err) {
+        console.error("Error fetching users:", err);
         res.status(500).json({ message: "Failed to fetch users." });
     }
 };
 exports.getAllUser = getAllUser;
-// Find A users
+// Find A User
 const findUser = async (req, res) => {
     try {
+        const id = parseInt(req.params.id);
+        if (isNaN(id)) {
+            return res.status(400).json({ error: "Invalid user ID" });
+        }
         const user = await prisma_1.default.user.findUnique({
-            where: { id: parseInt(req.params.id) }
+            where: { id },
+            include: {
+                roles: {
+                    include: { role: true }, // include role details
+                },
+            },
         });
         if (!user) {
-            return res.status(404).json({ error: "user not found" });
+            return res.status(404).json({ error: "User not found" });
         }
         res.json(user);
     }
     catch (err) {
-        res.status(500).json({ message: "Failed to fetch users." });
+        console.error("Error fetching user:", err);
+        res.status(500).json({ message: "Failed to fetch user." });
     }
 };
 exports.findUser = findUser;
-// Update user
+// Update user 
 const updateUser = async (req, res) => {
     try {
         const id = Number(req.params.id);
@@ -86,12 +116,13 @@ const updateUser = async (req, res) => {
         }
         const existingUser = await prisma_1.default.user.findUnique({
             where: { id },
+            include: { roles: true }, // include roles for comparison
         });
         if (!existingUser) {
             return res.status(404).json({ message: "User not found." });
         }
-        const { name, email, passwordHash, phone, role, imageUrl } = req.body;
-        // Prepare update object
+        const { name, email, passwordHash, phone, roleIds, imageUrl } = req.body;
+        // Build update data
         const updateData = {};
         if (name)
             updateData.name = name;
@@ -99,21 +130,34 @@ const updateUser = async (req, res) => {
             updateData.email = email;
         if (phone)
             updateData.phone = phone;
-        if (role)
-            updateData.role = role;
         if (imageUrl)
             updateData.imageUrl = imageUrl;
-        // Hash password only if provided and changed
-        if (!passwordHash.includes("$2b")) {
-            if (passwordHash && passwordHash.trim() !== "") {
-                const hashedPassword = await bcryptjs_1.default.hash(passwordHash, 10);
-                updateData.passwordHash = hashedPassword;
-                console.log("Has changed__: ", updateData);
+        // Handle password hashing 
+        if (passwordHash && passwordHash.trim() !== "") {
+            if (!passwordHash.startsWith("$2b$") && !passwordHash.startsWith("$2a$")) {
+                // plain text → hash it
+                updateData.passwordHash = await bcryptjs_1.default.hash(passwordHash, 10);
             }
+            else {
+                // already hashed → keep as is
+                updateData.passwordHash = passwordHash;
+            }
+        }
+        // Handle roles (many-to-many through UserRole)
+        if (Array.isArray(roleIds)) {
+            updateData.roles = {
+                deleteMany: {}, // remove all existing UserRole entries
+                create: roleIds.map((roleId) => ({
+                    role: { connect: { id: roleId } },
+                })),
+            };
         }
         const updatedUser = await prisma_1.default.user.update({
             where: { id },
-            data: updateData,
+            data: updateData, // ✅ now using the built object
+            include: {
+                roles: { include: { role: true } },
+            },
         });
         res.json({
             message: "User updated successfully.",

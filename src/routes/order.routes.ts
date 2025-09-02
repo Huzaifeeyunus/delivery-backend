@@ -2,9 +2,10 @@ import express from "express";
 import { 
         initiatePayment, 
         placeOrder,
+        getAllOrders,
         getUserOrders,
         getVendorOrders,
-        updateOrderStatus,
+        updateOrderStatus, 
         getOrderDetails,
         getCustomerOrders,updateDeliveryStatus,updatePaymentStatus,
         markOrderAsPaid, handlePaymentFailure, refundOrder } 
@@ -13,9 +14,9 @@ import { protect } from "../controllers/auth.controller";
  
 const router = express.Router();
   
-router.get("/", getOrderDetails); 
+router.get("/", getAllOrders); 
 router.get("/:orderId", getOrderDetails); 
-router.get("/all/admins/admin", getOrderDetails); 
+router.get("/all/admins/admin", getAllOrders); 
 router.get("/user/:userId", getUserOrders);
 router.get("/me/current/customer/:userId", getCustomerOrders);
 router.get("/vendors/vendor/:vendorId", getVendorOrders);

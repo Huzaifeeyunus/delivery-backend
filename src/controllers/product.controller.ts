@@ -1,6 +1,7 @@
 import { Request, Response } from "express"; 
 import prisma from "../lib/prisma";  
 import { generateSKU } from "../middlewares/randomnames.middleware"
+import { log } from "console";
 
 //import { log } from "console";
 interface MulterFiles {
@@ -621,17 +622,23 @@ if (videoFiles.length > 0) {
 
 
  
-// controllers/product.controller.ts 
- // controllers/product.controller.ts
+// controllers/product.controller.ts  // controllers/productController.ts
+ // controllers/productController.ts 
+
 export const updateProductImage = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { vendorId, name, description, longDescription } = req.body;
 
-    // Parse variants JSON
-    const variantsData = JSON.parse(req.body.variants || "[]");
+    // Parse variants JSON safely
+    let variantsData: any[] = [];
+    try {
+      variantsData = JSON.parse(req.body.variants || "[]");
+    } catch (err) {
+      return res.status(400).json({ message: "Invalid variants JSON" });
+    }
 
-    // Find existing product with variants + images
+    // Fetch product with variants + images
     const product = await prisma.product.findUnique({
       where: { id: Number(id) },
       include: { variants: { include: { images: true } } },
@@ -641,7 +648,7 @@ export const updateProductImage = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    // Update product main fields
+    // Update main product
     await prisma.product.update({
       where: { id: Number(id) },
       data: {
@@ -652,15 +659,28 @@ export const updateProductImage = async (req: Request, res: Response) => {
       },
     });
 
-    // Ensure req.files is always an array
-    const uploadedFiles = (req.files as Express.Multer.File[]) || [];
+    // Normalize uploaded files (from Multer)
+    const uploadedFiles: Express.Multer.File[] = Array.isArray(req.files)
+      ? (req.files as Express.Multer.File[])
+      : [];
 
-    // Loop through variants
+    // Track variant IDs we are keeping
+    const incomingVariantIds = variantsData.filter(v => v.id).map(v => v.id);
+
+    // 🔹 Remove variants that were deleted on frontend
+    await prisma.productVariant.deleteMany({
+      where: {
+        productId: Number(id),
+        id: { notIn: incomingVariantIds }, // delete variants not sent
+      },
+    });
+
+    // 🔹 Process each variant from frontend
     for (let i = 0; i < variantsData.length; i++) {
       const variant = variantsData[i];
 
       if (variant.id) {
-        // Existing variant -> update
+        // --- Update existing variant ---
         await prisma.productVariant.update({
           where: { id: variant.id },
           data: {
@@ -672,12 +692,11 @@ export const updateProductImage = async (req: Request, res: Response) => {
           },
         });
 
-        // Handle preserved images
+        // Keep only preserved images
         const preservedImageIds = variant.images
-          .filter((img: any) => img.id) // keep existing
+          .filter((img: any) => img.id)
           .map((img: any) => img.id);
 
-        // Delete removed images
         await prisma.productImage.deleteMany({
           where: {
             productVariantId: variant.id,
@@ -685,7 +704,7 @@ export const updateProductImage = async (req: Request, res: Response) => {
           },
         });
 
-        // Handle new uploads for this variant
+        // Save new uploaded images for this variant
         const filesForVariant = uploadedFiles.filter(
           (f) => f.fieldname === `variantImages_${i}`
         );
@@ -699,7 +718,7 @@ export const updateProductImage = async (req: Request, res: Response) => {
           });
         }
       } else {
-        // New variant -> create
+        // --- Create new variant ---
         const newVariant = await prisma.productVariant.create({
           data: {
             productId: Number(id),
@@ -711,7 +730,7 @@ export const updateProductImage = async (req: Request, res: Response) => {
           },
         });
 
-        // Handle uploads for new variant
+        // Save uploaded images for new variant
         const filesForVariant = uploadedFiles.filter(
           (f) => f.fieldname === `variantImages_${i}`
         );
@@ -727,12 +746,14 @@ export const updateProductImage = async (req: Request, res: Response) => {
       }
     }
 
-    res.json({ success: true, message: "Product updated successfully" });
+    res.json({ success: true, message: "Product & variants updated successfully" });
   } catch (error: any) {
     console.error("Update product error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+
 
 
 
@@ -890,7 +911,7 @@ export const updateProduct = async (req: Request, res: Response) => {
   
 
 // Delete Product and all related records
-export const deleteProduct = async (req: Request, res: Response) => {
+export const deleteProducttt = async (req: Request, res: Response) => {
   const id = parseInt(req.params.id);
   const user = req.user;
 
@@ -940,5 +961,135 @@ export const deleteProduct = async (req: Request, res: Response) => {
   } catch (err) {
     console.error("Error deleting product:", err);
     res.status(500).json({ message: "Failed to delete product." });
+  }
+};
+
+
+
+// controllers/productController.ts 
+
+export const deleteProductVariantttt = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Check if variant exists
+    const variant = await prisma.productVariant.findUnique({
+      where: { id: Number(id) },
+      include: { images: true },
+    });
+
+    if (!variant) {
+      return res.status(404).json({ message: "Variant not found" });
+    }
+
+    // Delete all images related to this variant
+    await prisma.productImage.deleteMany({
+      where: { productVariantId: variant.id },
+    });
+
+    // Delete the variant itself
+    await prisma.productVariant.delete({
+      where: { id: variant.id },
+    });
+
+    res.json({ success: true, message: "Variant deleted successfully" });
+  } catch (error: any) {
+    console.error("Delete variant error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+
+
+
+export const deleteProduct = async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+  const user = req.user;
+
+  try {
+    // Check vendor ownership unless admin
+    const product = await prisma.product.findUnique({
+      where: { id },
+      include: { vendor: true },
+    });
+
+    if (!product) {
+      return res.status(404).json({ message: "Product not found." });
+    }
+
+    const vendor = await prisma.vendor.findUnique({
+      where: { userId: user?.id },
+    });
+
+    const isAdmin = user?.role.toString().toUpperCase()   === "ADMIN" || user?.email.startsWith("huzaifeeyunus");
+    if (!isAdmin && (!vendor || vendor.id !== product.vendorId)) {
+      return res.status(403).json({ message: "Not authorized to delete this product." });
+    }
+
+    // 1️⃣ Delete all product images for these variants
+    const variantIds = (await prisma.productVariant.findMany({
+      where: { productId: id },
+      select: { id: true },
+    })).map(v => v.id);
+
+    if (variantIds.length > 0) {
+      await prisma.productImage.deleteMany({
+        where: { productVariantId: { in: variantIds } },
+      });
+    }
+
+    // 2️⃣ Delete variants, reviews, ratings, cartItems, orderItems
+    await prisma.productVariant.deleteMany({ where: { productId: id } });
+    await prisma.rating.deleteMany({ where: { productId: id } });
+    await prisma.review.deleteMany({ where: { productId: id } });
+    await prisma.cartItem.deleteMany({ where: { productId: id } });
+    await prisma.orderItem.deleteMany({ where: { productId: id } });
+    // 3️⃣ Delete the product itself
+    await prisma.product.delete({ where: { id } });
+
+    res.json({ message: "Product and all related data deleted successfully." });
+  } catch (err) {
+    console.error("Error deleting product:", err);
+    res.status(500).json({ message: "Failed to delete product." });
+  }
+};
+
+export const deleteProductVariant = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const user = req.user;
+ 
+    const variant = await prisma.productVariant.findUnique({
+      where: { id: Number(id) },
+      include: { images: true, product: true },
+    });
+
+    if (!variant) {
+      return res.status(404).json({ message: "Variant not found" });
+    }
+
+    const vendor = await prisma.vendor.findUnique({
+      where: { userId: user?.id },
+    });
+
+    const isAdmin = user?.role.toString().toUpperCase() === "ADMIN" || user?.email.startsWith("huzaifeeyunus");
+    if (!isAdmin && (!vendor || vendor.id !== variant.product.vendorId)) {
+      return res.status(403).json({ message: "Not authorized to delete this variant." });
+    }
+
+    // Delete all images related to this variant
+    await prisma.productImage.deleteMany({
+      where: { productVariantId: variant.id },
+    });
+
+    // Delete the variant itself
+    await prisma.productVariant.delete({
+      where: { id: variant.id },
+    });
+
+    res.json({ success: true, message: "Variant deleted successfully" });
+  } catch (error: any) {
+    console.error("Delete variant error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };

@@ -93,7 +93,7 @@ const viewAllPayments = async (req, res) => {
         if (!user)
             return res.status(403).json({ error: "Forbidden: Admins only" });
         const getUser = await prisma_1.default.user.findFirst({ where: { id: Number(user.id) } });
-        if (!getUser || !getUser.role.toString().startsWith("ADMIN"))
+        if (!getUser || !getUser.role?.toString().startsWith("ADMIN"))
             return res.status(403).json({ error: "Forbidden: Admins only" });
         const { status, customerId, fromDate, toDate } = req.query;
         const payments = await prisma_1.default.payment.findMany({

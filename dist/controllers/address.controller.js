@@ -102,16 +102,16 @@ const setDefaultAddress = async (req, res) => {
         if (!address || address.userId !== userId) {
             return res.status(404).json({ message: "Address not found" });
         }
-        const isDefault = req.body;
+        //const _isDefault = req.body; 
         // Reset all user's addresses to isDefault = false
         await prisma_1.default.address.updateMany({
             where: { userId },
             data: { isDefault: false },
         });
-        // Set chosen address as default
+        // Set chosen address as default 
         const updatedAddress = await prisma_1.default.address.update({
             where: { id: addressId },
-            data: { isDefault },
+            data: { isDefault: true },
         });
         res.json({
             message: "Default address updated successfully",

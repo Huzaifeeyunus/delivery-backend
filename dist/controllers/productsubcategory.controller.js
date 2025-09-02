@@ -7,9 +7,10 @@ exports.deleteSubCategory = exports.updateSubCategory = exports.findSubCategory 
 const prisma_1 = __importDefault(require("../lib/prisma"));
 // Create Product
 const createSubCategory = async (req, res) => {
-    const { name, category } = req.body;
+    const { name, categoryId } = req.body;
     const user = req.user;
-    const categoryId = Number(category?.Id);
+    const newCategoryId = Number(categoryId);
+    console.log(name, newCategoryId);
     if (!name) {
         console.warn(`Skipping subCategory ${name} due to missing data`);
     }
@@ -18,7 +19,7 @@ const createSubCategory = async (req, res) => {
             const subCategory = await prisma_1.default.subCategory.create({
                 data: {
                     name,
-                    categoryId,
+                    categoryId: newCategoryId,
                 }
             });
             res.status(201).json(subCategory);
@@ -33,7 +34,9 @@ exports.createSubCategory = createSubCategory;
 // Get All subCategory
 const getAllsubCategory = async (_req, res) => {
     try {
-        const subCategories = await prisma_1.default.subCategory.findMany();
+        const subCategories = await prisma_1.default.subCategory.findMany({
+            include: { category: true }, // <-- include related category
+        });
         res.json(subCategories);
     }
     catch (err) {
@@ -49,7 +52,8 @@ const findSubCategoryByCategory = async (_req, res) => {
         });
         if (_Category != null) {
             const subCategories = await prisma_1.default.subCategory.findMany({
-                where: { categoryId: _Category?.id }
+                where: { categoryId: _Category?.id },
+                include: { category: true },
             });
             res.json(subCategories);
         }
@@ -66,7 +70,8 @@ exports.findSubCategoryByCategory = findSubCategoryByCategory;
 const findSubCategory = async (req, res) => {
     try {
         const subCategory = await prisma_1.default.subCategory.findUnique({
-            where: { id: parseInt(req.params.id) }
+            where: { id: parseInt(req.params.id) },
+            include: { category: true },
         });
         if (!subCategory) {
             return res.status(404).json({ error: "subCategory not found" });
@@ -82,7 +87,7 @@ exports.findSubCategory = findSubCategory;
 const updateSubCategory = async (req, res) => {
     const { id } = req.params;
     const user = req.user;
-    const { name, description, price, stock } = req.body;
+    const { name } = req.body;
     try {
         const vendor = await prisma_1.default.vendor.findUnique({
             where: { userId: user?.id },

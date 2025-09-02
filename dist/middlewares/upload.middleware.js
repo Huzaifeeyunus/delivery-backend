@@ -12,16 +12,47 @@ function createUploader() {
     const baseUploads = path_1.default.join(__dirname, "../../uploads");
     const storage = multer_1.default.diskStorage({
         destination: (req, file, cb) => {
-            // decide folder by fieldname OR mimetype
             let subfolder = "misc";
-            if (file.fieldname === "images" || /^variantImages_/.test(file.fieldname) || file.mimetype.startsWith("image/")) {
-                subfolder = "products/images";
+            // --- Image Slider Uploads ---
+            if (req.baseUrl.includes("imagesliders")) {
+                if (file.mimetype.startsWith("image/")) {
+                    subfolder = "images/slider/images";
+                }
+                else if (file.mimetype.startsWith("video/")) {
+                    subfolder = "images/slider/videos";
+                }
             }
-            else if (file.fieldname === "videos" || file.mimetype.startsWith("video/")) {
-                subfolder = "products/videos";
+            // --- User Uploads (avatars, profile images) ---
+            else if (req.baseUrl.includes("users")) {
+                if (file.mimetype.startsWith("image/")) {
+                    subfolder = "users/images";
+                }
+                else {
+                    subfolder = "users/others";
+                }
             }
+            // --- User Uploads (avatars, profile images) ---
+            else if (req.baseUrl.includes("vendors")) {
+                if (file.mimetype.startsWith("image/")) {
+                    subfolder = "vendors/images";
+                }
+                else {
+                    subfolder = "vendors/others";
+                }
+            }
+            // --- Product Uploads (old logic, preserved) ---
             else {
-                subfolder = "products/others";
+                if (file.fieldname === "images" ||
+                    /^variantImages_/.test(file.fieldname) ||
+                    file.mimetype.startsWith("image/")) {
+                    subfolder = "products/images";
+                }
+                else if (file.fieldname === "videos" || file.mimetype.startsWith("video/")) {
+                    subfolder = "products/videos";
+                }
+                else {
+                    subfolder = "products/others";
+                }
             }
             const uploadDir = path_1.default.join(baseUploads, subfolder);
             fs_1.default.mkdirSync(uploadDir, { recursive: true });
@@ -34,6 +65,44 @@ function createUploader() {
     });
     return (0, multer_1.default)({ storage });
 }
+/*
+// src/middlewares/upload.middleware.ts
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+import { Request } from "express";
+
+export function createUploader() {
+  const baseUploads = path.join(__dirname, "../../uploads");
+
+  const storage = multer.diskStorage({
+    destination: (req: Request, file, cb) => {
+      // decide folder by fieldname OR mimetype
+      let subfolder = "misc";
+
+      if (file.fieldname === "images" || /^variantImages_/.test(file.fieldname) || file.mimetype.startsWith("image/")) {
+        subfolder = "products/images";
+      } else if (file.fieldname === "videos" || file.mimetype.startsWith("video/")) {
+        subfolder = "products/videos";
+      } else {
+        subfolder = "products/others";
+      }
+
+      const uploadDir = path.join(baseUploads, subfolder);
+      fs.mkdirSync(uploadDir, { recursive: true });
+      cb(null, uploadDir);
+    },
+
+    filename: (req: Request, file, cb) => {
+      const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      cb(null, `${unique}${path.extname(file.originalname)}`);
+    },
+  });
+
+  return multer({ storage });
+}
+
+
 /*
 import { Request } from "express";
 import multer, { diskStorage } from "multer";

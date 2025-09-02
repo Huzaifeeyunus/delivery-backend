@@ -9,6 +9,7 @@ const auth_controller_1 = require("../controllers/auth.controller");
 const router = express_1.default.Router();
 router.get("/", order_controller_1.getOrderDetails);
 router.get("/:orderId", order_controller_1.getOrderDetails);
+router.get("/all/admins/admin", order_controller_1.getOrderDetails);
 router.get("/user/:userId", order_controller_1.getUserOrders);
 router.get("/me/current/customer/:userId", order_controller_1.getCustomerOrders);
 router.get("/vendors/vendor/:vendorId", order_controller_1.getVendorOrders);

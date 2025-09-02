@@ -331,7 +331,7 @@ model Delivery {
 model Order {
   id             Int            @id @default(autoincrement())
   customerId     Int
-  vendorId       Int?
+  vendorId       Int           
   deliveryId     Int?
   status         OrderStatus    @default(pending)
   totalAmount    Float
@@ -356,7 +356,7 @@ model Order {
   address        Address?       @relation(fields: [addressId], references: [id])
   customer       User           @relation("CustomerOrders", fields: [customerId], references: [id])
   delivery       User?          @relation("DeliveryOrders", fields: [deliveryId], references: [id])
-  vendor         Vendor?        @relation(fields: [vendorId], references: [id])
+  vendor         Vendor        @relation(fields: [vendorId], references: [id])
   items          OrderItem[]
   payment        Payment?
   transactions   Transaction[]
@@ -497,6 +497,41 @@ model GeneralLogReport {
 
   @@map("generallogreport")
 }
+
+model PublicPage {
+  id          Int                @id @default(autoincrement())
+  slug        String             @unique  // "home", "about", "pricing", etc.
+  title       String
+  description String
+
+  // Placement flags
+  showInHeader Boolean           @default(false)
+  showInFooter Boolean           @default(false)
+  isVisible    Boolean           @default(true)
+
+  // Relations
+  origins     PublicPageOrigin[]
+}
+
+
+model PublicPageOrigin {
+  id          Int           @id @default(autoincrement())
+  title       String
+  description String
+  publicPageId Int
+  publicPage   PublicPage   @relation(fields: [publicPageId], references: [id])
+
+  images       PublicOriginImage[]
+}
+
+model PublicOriginImage {
+  id          Int         @id @default(autoincrement())
+  imageUrl    String
+  pageOriginId Int
+  pageOrigin   PublicPageOrigin @relation(fields: [pageOriginId], references: [id])
+}
+
+
 
 model LogReport {
   id        Int      @id @default(autoincrement())

@@ -30,17 +30,23 @@ const protect = async (req, res, next) => {
 };
 exports.protect = protect;
 const register = async (req, res) => {
-    const { name, email, password, phone, shopName, shopPhone, shopLocation, shopAddress } = req.body;
+    const { name, email, password, phone, shopName, shopPhone, shopLocation, shopAddress, licenseNumber, vehicleType, vehiclePlate, agentAddress, nationalId, dateOfBirth, emergencyContactName, emergencyContactPhone, region, type = "customer", // default
+     } = req.body;
     try {
         // Check if user exists
         const existingUser = await prisma_1.default.user.findUnique({ where: { email } });
         if (existingUser) {
             return res.status(409).json({ message: "User already exists" });
         }
-        const role = "customer";
         // Hash password
         const passwordHash = await (0, hash_1.hashPassword)(password);
-        // Create user
+        // Decide role
+        let role = "customer";
+        if (type === "vendor")
+            role = "vendor";
+        if (type === "delivery")
+            role = "delivery";
+        // Create user (vendors & delivery start as inactive)
         const user = await prisma_1.default.user.create({
             data: {
                 name,
@@ -48,11 +54,11 @@ const register = async (req, res) => {
                 phone,
                 role,
                 passwordHash,
+                //isActive: role === "customer", // only customers active immediately
             },
         });
         // If vendor, create vendor profile
-        const vrole = "customer";
-        if (vrole === "vendor") {
+        if (role === "vendor") {
             if (!shopName || !shopAddress) {
                 return res.status(400).json({ message: "Vendor must provide shop name and address" });
             }
@@ -63,12 +69,44 @@ const register = async (req, res) => {
                     shopPhone,
                     shopLocation,
                     shopAddress,
+                    isActive: false, // pending admin approval
                 },
             });
         }
-        const token = (0, jwt_1.generateToken)({ id: user.id, name: user.name, email: user.email, role: user.role });
+        // If delivery, create delivery profile
+        if (role === "delivery") {
+            if (!licenseNumber || !vehicleType || !vehiclePlate || !agentAddress) {
+                return res.status(400).json({ message: "Delivery agent must provide full details" });
+            }
+            await prisma_1.default.deliveryAgent.create({
+                data: {
+                    userId: user.id,
+                    licenseNumber,
+                    vehicleType,
+                    vehiclePlate,
+                    agentAddress,
+                    nationalId,
+                    dateOfBirth,
+                    emergencyContactName,
+                    emergencyContactPhone,
+                    region,
+                    isActive: false, // pending admin approval
+                },
+            });
+        }
+        // Generate token (customers only; vendors & delivery must wait for approval)
+        const token = role === "customer"
+            ? (0, jwt_1.generateToken)({
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+            })
+            : null;
         res.status(201).json({
-            message: "User registered successfully",
+            message: role === "customer"
+                ? "User registered successfully"
+                : "Registration submitted, pending admin approval",
             token,
             user: {
                 id: user.id,
@@ -89,7 +127,7 @@ const login = async (req, res) => {
     if (!email || !password) {
         return res.status(400).json({ message: "Email and password are required." });
     }
-    const loginuser = await prisma_1.default.user.findUnique({ where: { email } });
+    const loginuser = await prisma_1.default.user.findUnique({ where: { email }, include: { roles: true } });
     if (!loginuser) {
         return res.status(401).json({ message: "Invalid email or password." });
     }
@@ -97,7 +135,8 @@ const login = async (req, res) => {
     if (!isMatch) {
         return res.status(401).json({ message: "Invalid email or password." });
     }
-    const token = jsonwebtoken_1.default.sign({ id: loginuser.id, name: loginuser.name, email: loginuser.email, role: loginuser.role }, process.env.JWT_SECRET, {
+    const roles = await prisma_1.default.role.findUnique({ where: { id: loginuser.roles?.[0].roleId } });
+    const token = jsonwebtoken_1.default.sign({ id: loginuser.id, name: loginuser.name, email: loginuser.email, role: roles }, process.env.JWT_SECRET, {
         expiresIn: "1h",
     });
     res.status(200).json({
@@ -106,7 +145,7 @@ const login = async (req, res) => {
             id: loginuser.id,
             name: loginuser.name,
             email: loginuser.email,
-            role: loginuser.role,
+            role: roles,
         },
     });
 };
