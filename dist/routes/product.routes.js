@@ -18,5 +18,6 @@ router.put("/:id", auth_controller_1.protect, product_controller_1.updateProduct
 router.put("/with-image/:id", auth_controller_1.protect, uploader.any(), product_controller_1.updateProductWithImage); // Update product
 router.put("/image/:id", auth_controller_1.protect, uploader.any(), product_controller_1.updateProductImage); // Update product
 router.put("/video/:id", auth_controller_1.protect, uploader.any(), product_controller_1.updateProductVideo); // Update product
-router.delete("/:id", auth_controller_1.protect, product_controller_1.deleteProduct); // Delete product
+router.delete("/product/:id", auth_controller_1.protect, product_controller_1.deleteProduct); // Delete product
+router.delete("/variant/:id", auth_controller_1.protect, product_controller_1.deleteProductVariant); // Delete product
 exports.default = router;

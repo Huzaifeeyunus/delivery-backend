@@ -25,7 +25,7 @@ const initiatePayment = async (req, res) => {
                 amount,
                 status: "initiated",
                 reference,
-                rawData: {}, // keep external gateway data later
+                rawData: JSON.stringify({}), // keep external gateway data later
             },
         });
         // TODO: integrate with MOMO/Paystack API here

@@ -73,7 +73,7 @@ exports.createVendor = createVendor;
 const getAllVendor = async (_req, res) => {
     try {
         const vendors = await prisma_1.default.vendor.findMany({
-            include: { images: true, videos: true },
+            include: { images: true, videos: true, orders: true },
         });
         res.json(vendors);
     }
@@ -89,7 +89,7 @@ const findVendor = async (req, res) => {
     try {
         const vendor = await prisma_1.default.vendor.findUnique({
             where: { id },
-            include: { images: true, videos: true },
+            include: { images: true, videos: true, orders: true },
         });
         if (!vendor)
             return res.status(404).json({ message: "Vendor not found." });

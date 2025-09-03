@@ -6,7 +6,7 @@ const router = express.Router();
 // ========== PublicPages ==========
 router.get("/", async (req, res) => {
   const pages = await prisma.publicPage.findMany({
-    include: { origins: { include: { images: true } } },
+    include: { PageOrigin: { include: { OriginImage: true } } },
   });
   res.json(pages);
 });
@@ -14,15 +14,15 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   const page = await prisma.publicPage.findUnique({
     where: { id: Number(req.params.id) },
-    include: { origins: { include: { images: true } } },
+    include: { PageOrigin: { include: { OriginImage: true } } },
   });
   res.json(page);
 });
 
 router.post("/", async (req, res) => {
-  const { slug, title, description } = req.body;
+  const { slug, title, description, showInHeader, showInFooter, isVisible } = req.body;
   const page = await prisma.publicPage.create({
-    data: { slug, title, description },
+    data: { slug, title, description, showInHeader, showInFooter, isVisible },
   });
   res.json(page);
 });
@@ -43,16 +43,16 @@ router.delete("/:id", async (req, res) => {
 
 // ========== PageOrigins ==========
 router.get("/:pageId/origins", async (req, res) => {
-  const origins = await prisma.publicPageOrigin.findMany({
+  const origins = await prisma.pageOrigin.findMany({
     where: { publicPageId: Number(req.params.pageId) },
-    include: { images: true },
+    include: { OriginImage: true },
   });
   res.json(origins);
 });
 
 router.post("/:pageId/origins", async (req, res) => {
   const { title, description } = req.body;
-  const origin = await prisma.publicPageOrigin.create({
+  const origin = await prisma.pageOrigin.create({
     data: {
       title,
       description,
@@ -64,7 +64,7 @@ router.post("/:pageId/origins", async (req, res) => {
 
 router.put("/origins/:id", async (req, res) => {
   const { title, description } = req.body;
-  const origin = await prisma.publicPageOrigin.update({
+  const origin = await prisma.pageOrigin.update({
     where: { id: Number(req.params.id) },
     data: { title, description },
   });
@@ -72,21 +72,21 @@ router.put("/origins/:id", async (req, res) => {
 });
 
 router.delete("/origins/:id", async (req, res) => {
-  await prisma.publicPageOrigin.delete({ where: { id: Number(req.params.id) } });
+  await prisma.pageOrigin.delete({ where: { id: Number(req.params.id) } });
   res.json({ success: true });
 });
 
 // ========== OriginImages ==========
 router.post("/origins/:originId/images", async (req, res) => {
   const { imageUrl } = req.body;
-  const image = await prisma.publicOriginImage.create({
+  const image = await prisma.originImage.create({
     data: { imageUrl, pageOriginId: Number(req.params.originId) },
   });
   res.json(image);
 });
 
 router.delete("/images/:id", async (req, res) => {
-  await prisma.publicOriginImage.delete({ where: { id: Number(req.params.id) } });
+  await prisma.originImage.delete({ where: { id: Number(req.params.id) } });
   res.json({ success: true });
 });
 

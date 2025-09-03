@@ -24,9 +24,16 @@ export const getPageBySlug = async (req: Request, res: Response) => {
 
 // Create page
 export const createPage = async (req: Request, res: Response) => {
-  const { slug, title, description } = req.body;
+  const { slug, title, description, showInHeader, showInFooter, isVisible } = req.body;
   const page = await prisma.publicPage.create({
-    data: { slug, title, description },
+    data: {
+    slug,
+    title,
+    description,
+    showInHeader: false,   // or true if needed
+    showInFooter: false,
+    isVisible: true,
+  },
   });
   res.json(page);
 };
@@ -34,10 +41,17 @@ export const createPage = async (req: Request, res: Response) => {
 // Update page
 export const updatePage = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { slug, title, description } = req.body;
+  const { slug, title, description, showInHeader, showInFooter, isVisible } = req.body;
   const page = await prisma.publicPage.update({
     where: { id: Number(id) },
-    data: { slug, title, description },
+    data: {
+    slug,
+    title,
+    description,
+    showInHeader: false,   // or true if needed
+    showInFooter: false,
+    isVisible: true,
+  },
   });
   res.json(page);
 };

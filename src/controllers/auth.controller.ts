@@ -8,9 +8,14 @@ import { generateToken, signToken } from "../utils/jwt";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken"; 
 import { log } from "console";
-import { Role } from "@prisma/client";
+import { type Role } from "@prisma/client";
 
-
+/* 
+ type Role = {
+  id: number;
+  name: string;
+  description: string | null;
+}; */
 declare global {
   namespace Express {
     interface Request {

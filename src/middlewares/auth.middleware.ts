@@ -4,6 +4,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken"; 
 import { tokenBlacklist } from "../utils/tokenBlacklist";  
+import { Role } from "@prisma/client";
 
 const secret = process.env.JWT_SECRET || "your_jwt_secret";
  
@@ -25,7 +26,7 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
       return res.status(403).json({ error: "Invalid token payload" });
     }
 
-    req.user = decoded as JwtPayload & { id: number; email: string };
+    req.user = decoded as JwtPayload & { id: number; email: string, role: Role };
     next();
   } catch (err) {
     return res.status(403).json({ error: "Invalid or expired token" });
