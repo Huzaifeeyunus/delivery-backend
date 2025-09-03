@@ -26,11 +26,11 @@ jobs:
 
       # Step 4: Generate Prisma client
       - name: Generate Prisma client
-        run: npx prisma generate 
+        run: npx prisma generate
 
-      # Step 4b: Mark migration as resolved
-      - name: Mark specific Prisma migration as resolved
-        run: npx prisma migrate resolve --applied 20250902051217_added_pagesvisibility
+      # Step 4b: Resolve problematic migration
+      - name: Resolve problematic migration
+        run: npx prisma migrate resolve --applied 20250902234136_updated_publicpages
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
