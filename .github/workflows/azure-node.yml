@@ -28,18 +28,6 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      # Step 4b: Resolve problematic migration
-      - name: Resolve problematic migration
-        run: npx prisma migrate resolve --applied 20250902234136_updated_publicpages
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
-      # Step 4c: Run remaining Prisma migrations
-      - name: Run Prisma migrations
-        run: npx prisma migrate deploy
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
       # Step 5: Build TypeScript
       - name: Build TypeScript
         run: npm run build
