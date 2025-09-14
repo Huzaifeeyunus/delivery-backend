@@ -19,7 +19,7 @@ router.get("/:orderId", getOrderDetails);
 router.get("/all/admins/admin", getAllOrders); 
 router.get("/user/:userId", getUserOrders);
 router.get("/me/current/customer/:userId", getCustomerOrders);
-router.get("/vendors/vendor/:vendorId", getVendorOrders);
+router.get("/vendors/:vendorId/vendor", getVendorOrders);
 
 router.post("/payments/pay/initiate",  protect, initiatePayment);
 router.post("/placeOrder",  protect, placeOrder);

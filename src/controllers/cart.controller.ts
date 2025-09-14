@@ -8,47 +8,50 @@ const haversine = require("haversine-distance");
 
 
 // Add item to cart (with variant support)
+export const addToCart = async (req: Request, res: Response) => {
+  try {
+    const userId = Number(req.user?.id); // authenticated user
+    const { productId, variantId, sizeId, quantity } = req.body;
 
- export const addToCart = async (req: Request, res: Response) => {
-  try { 
-    const userId = Number(req.user?.id); // assuming user is authenticated 
-    const { productId, variantId, quantity } = req.body;
- 
     if (!productId || !quantity) {
       return res.status(400).json({ message: "Product and quantity are required" });
     }
- 
-    // ✅ Check if product exists
+
+    // ✅ Check product exists
     const product = await prisma.product.findUnique({
       where: { id: productId },
       select: {
         id: true,
-        stock: true,
         name: true,
         variants: {
           where: { id: variantId || undefined },
-          select: { id: true, stock: true },
+          select: { id: true, sizes: true },
         },
       },
     });
 
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    } 
+    if (!product) return res.status(404).json({ message: "Product not found" });
 
-    // ✅ If variantId is provided, check it
+    // ✅ If variant is provided, validate it
     let variant = null;
     if (variantId) {
       variant = await prisma.productVariant.findUnique({
         where: { id: variantId },
+        include: { sizes: true },
       });
 
-      if (!variant) {
-        return res.status(404).json({ message: "Variant not found" });
-      }
-    } 
+      if (!variant) return res.status(404).json({ message: "Variant not found" });
 
-    // ✅ Get or create cart for user
+      // ✅ If size is required, validate it
+      if (sizeId) {
+        const sizeExists = variant.sizes.some((s) => s.id === sizeId);
+        if (!sizeExists) {
+          return res.status(400).json({ message: "Selected size not available for this variant" });
+        }
+      }
+    }
+
+    // ✅ Get or create user cart
     let cart = await prisma.cart.findFirst({
       where: { userId },
       include: { items: true },
@@ -59,14 +62,15 @@ const haversine = require("haversine-distance");
         data: { userId },
         include: { items: true },
       });
-    } 
+    }
 
-    // ✅ Check if item already exists in cart (same product + variant)
+    // ✅ Check if same product + variant + size already exists
     const existingItem = await prisma.cartItem.findFirst({
       where: {
         cartId: cart.id,
         productId,
         variantId: variantId || null,
+        sizeId: sizeId || null,
       },
     });
 
@@ -74,32 +78,30 @@ const haversine = require("haversine-distance");
       // Update quantity
       const updatedItem = await prisma.cartItem.update({
         where: { id: existingItem.id },
-        data: {
-          quantity: existingItem.quantity + quantity,
-        },
-      }); 
-
-      return res.json({ message: "Cart updated", item: updatedItem });
-    } else {
-      // Add new item
-      const newItem = await prisma.cartItem.create({
-        data: {
-          cartId: cart.id,
-          productId,
-          variantId: variantId || null,
-          quantity,
-          price: variant ? variant.price : 0, // ✅ use variant price if exists
-        },
+        data: { quantity: existingItem.quantity + quantity },
       });
- 
-      return res.json({ message: "Item added to cart", item: newItem });
+      return res.json({ message: "Cart updated", item: updatedItem });
     }
+
+    // ✅ Add new cart item
+    const newItem = await prisma.cartItem.create({
+      data: {
+        cartId: cart.id,
+        productId,
+        variantId: variantId || null,
+        sizeId: sizeId || null,
+        quantity,
+        price: variant ? Number(variant.sizes?.map(s => s.price)) : 0,
+      },
+    });
+
+    return res.json({ message: "Item added to cart", item: newItem });
   } catch (error) {
     console.error("Error adding to cart:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
- 
+
 
 // ✅ updateCartQuantity with stock validation
 export const updateCartQuantity = async (req: Request, res: Response) => {

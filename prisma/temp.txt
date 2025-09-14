@@ -118,7 +118,7 @@ model Product {
   isFeatured      Boolean          @default(false)
   longDescription String?
   slug            String           @unique
-  stockStatus     StockStatus      @default(IN_STOCK)
+  stockStatus     String           @default("In Stock")
   subCategoryId   Int?
   weight          Float?
   brandId         Int?
@@ -138,7 +138,6 @@ model Product {
   videos          ProductVideo[]
   ratings         Rating[]
   reviews         Review[]
-  images          ProductImage[] // NEW: product-level images
 
   @@index([brandId], map: "product_brandId_fkey")
   @@index([categoryId], map: "product_categoryId_fkey")
@@ -150,61 +149,35 @@ model Product {
 }
 
 model ProductVariant {
-  id        Int                  @id @default(autoincrement())
-  productId Int
-  colorId   Int
-  color     Color                @relation(fields: [colorId], references: [id])
-  images    ProductImage[]
-  sizes     ProductVariantSize[]
-  createdAt DateTime             @default(now())
-  updatedAt DateTime             @updatedAt
-  product   Product              @relation(fields: [productId], references: [id])
+  id            Int            @id @default(autoincrement())
+  productId     Int
+  color         String?
+  size          String?
+  SKU           String?
+  stock         Int
+  price         Float
+  available     Boolean        @default(true)
+  barcode       String?
+  createdAt     DateTime       @default(now())
+  discountPrice Float?
+  stockStatus   String         @default("In Stock")
+  updatedAt     DateTime       @updatedAt
+  cartItems     CartItem[]
+  orderItem     OrderItem[]
+  images        ProductImage[]
+  product       Product        @relation(fields: [productId], references: [id])
 
-  orderItems OrderItem[]
-  cartItems  CartItem[]
-
-  @@unique([productId, colorId]) // prevent duplicate color variant for same product 
-  @@index([productId])
-  @@index([colorId])
+  @@index([productId], map: "productvariant_productId_fkey")
   @@map("productvariant")
 }
-
-model ProductVariantSize {
-  id               Int            @id @default(autoincrement())
-  productVariantId Int
-  sizeId           Int
-  SKU              String?
-  stock            Int
-  price            Float
-  discountPrice    Float?
-  available        Boolean        @default(true)
-  stockStatus      StockStatus    @default(IN_STOCK)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  variant          ProductVariant @relation(fields: [productVariantId], references: [id])
-  size             Size           @relation(fields: [sizeId], references: [id])
-
-  orderItems OrderItem[]
-  cartItems  CartItem[]
-
-  @@unique([productVariantId, sizeId]) // prevent duplicate size row per variant
-  @@index([productVariantId])
-  @@index([sizeId])
-  @@map("productvariant_size")
-}
-
+ 
 model ProductImage {
   id               Int             @id @default(autoincrement())
   url              String
   alt              String?
-  isPrimary        Boolean         @default(false) // new
-  position         Int? // new: order for UI
-  productId        Int?
   productVariantId Int?
-  product          Product?        @relation(fields: [productId], references: [id], onDelete: Cascade)
-  productVariant   ProductVariant? @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  productVariant   ProductVariant? @relation(fields: [productVariantId], references: [id])
 
-  @@index([productId], map: "productimage_productId_fkey")
   @@index([productVariantId], map: "productimage_productVariantId_fkey")
   @@map("productimage")
 }
@@ -265,18 +238,15 @@ model Origin {
 }
 
 model Color {
-  id       Int              @id @default(autoincrement())
-  name     String           @unique
-  hex      String? // optional HEX code for UI
-  variants ProductVariant[]
+  id   Int    @id @default(autoincrement())
+  name String
 
   @@map("color")
 }
 
 model Size {
-  id    Int                  @id @default(autoincrement())
-  name  String
-  sizes ProductVariantSize[]
+  id   Int    @id @default(autoincrement())
+  name String
 
   @@map("size")
 }
@@ -399,25 +369,22 @@ model Order {
 }
 
 model OrderItem {
-  id        Int                 @id @default(autoincrement())
+  id        Int             @id @default(autoincrement())
   orderId   Int
   productId Int
   quantity  Int
-  createdAt DateTime            @default(now())
+  createdAt DateTime        @default(now())
   subtotal  Float
   unitPrice Float
-  updatedAt DateTime            @updatedAt
+  updatedAt DateTime        @updatedAt
   variantId Int?
-  sizeId    Int?
-  order     Order               @relation(fields: [orderId], references: [id])
-  product   Product             @relation(fields: [productId], references: [id])
-  variant   ProductVariant?     @relation(fields: [variantId], references: [id])
-  size      ProductVariantSize? @relation(fields: [sizeId], references: [id])
+  order     Order           @relation(fields: [orderId], references: [id])
+  product   Product         @relation(fields: [productId], references: [id])
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
 
   @@index([orderId], map: "orderitem_orderId_fkey")
   @@index([productId], map: "orderitem_productId_fkey")
   @@index([variantId], map: "orderitem_variantId_fkey")
-  @@index([sizeId], map: "orderitem_sizeId_fkey")
   @@map("orderitem")
 }
 
@@ -434,24 +401,21 @@ model Cart {
 }
 
 model CartItem {
-  id        Int                 @id @default(autoincrement())
+  id        Int             @id @default(autoincrement())
   cartId    Int
   productId Int
   quantity  Int
   price     Float
-  createdAt DateTime            @default(now())
-  updatedAt DateTime            @updatedAt
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
   variantId Int?
-  sizeId    Int?
-  cart      Cart                @relation(fields: [cartId], references: [id])
-  product   Product             @relation(fields: [productId], references: [id])
-  variant   ProductVariant?     @relation(fields: [variantId], references: [id])
-  size      ProductVariantSize? @relation(fields: [sizeId], references: [id])
+  cart      Cart            @relation(fields: [cartId], references: [id])
+  product   Product         @relation(fields: [productId], references: [id])
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
 
   @@index([cartId], map: "cartitem_cartId_fkey")
   @@index([productId], map: "cartitem_productId_fkey")
   @@index([variantId], map: "cartitem_variantId_fkey")
-  @@index([sizeId], map: "cartitem_sizeId_fkey")
   @@map("cartitem")
 }
 
@@ -621,13 +585,4 @@ enum DeliveryStatus {
   pending
   enroute
   delivered
-}
-
-enum StockStatus {
-  IN_STOCK
-  OUT_OF_STOCK
-  PREORDER
-  AVAILABLE
-  FINISHED
-  VERFIED
 }

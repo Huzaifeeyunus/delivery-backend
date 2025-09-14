@@ -1,37 +1,46 @@
-import { Request, Response } from "express"; 
-import prisma from "../lib/prisma";  
-import { generateSKU } from "../middlewares/randomnames.middleware"
+import { Request, Response } from "express";
+import prisma from "../lib/prisma";
+import { generateSKU } from "../middlewares/randomnames.middleware";
+import { connect } from "http2";
+import { StockStatus } from "@prisma/client";
 import { log } from "console";
 
-//import { log } from "console";
 interface MulterFiles {
-    images?: Express.Multer.File[];
-    videos?: Express.Multer.File[]; 
-  [key: string]: Express.Multer.File[] | undefined; // allow dynamic keys like variantImages_0
+  images?: Express.Multer.File[];
+  videos?: Express.Multer.File[];
+  [key: string]: Express.Multer.File[] | undefined;
 }
+
 interface VariantForm {
-  id?: number | 0; 
-  color: string | "null";
-  size: string | "null";
-  SKU: string | "null";
-  price: number | 0;
-  stock: number | 0;
-  available: boolean | false;
-  discountPrice: number | 0;
+  id?: number | 0;
+  colorId: number;
+  sizeId: number;
+  price?: number;
+  stock?: number;
+  available?: boolean;
+  discountPrice?: number;
+  sizes?: ProductVariantSizeForm[];
   images?: ProductImageForm[];
+}
+
+interface ProductVariantSizeForm {
+  id?: number | 0;
+  sizeId: number;
+  SKU?: string;
+  price: number;
+  stock: number;
+  available?: boolean;
+  discountPrice?: number;
 }
 
 interface ProductImageForm {
   id?: number | 0;
   url: string;
-  alt?: string | "null";
-  productVariantId?: number | 0;
+  alt?: string;
 }
 
-
-// Create Product
-export const createProduct = async (req: Request, res: Response) => {  
-  
+// ------------------- CREATE PRODUCT -------------------
+export const createProduct = async (req: Request, res: Response) => {
   try {
     const {
       name,
@@ -44,21 +53,18 @@ export const createProduct = async (req: Request, res: Response) => {
       subCategoryId,
       brandId,
       materialId,
-      originId, 
+      originId,
       tag,
-      variants // This will be an array from the formData 
+      variants,
     } = req.body;
 
     const user = req.user;
-
-    if (!subCategoryId || !categoryId) {
+    if (!subCategoryId || !categoryId)
       return res.status(400).json({ message: "Missing category or subcategory." });
-    }
 
     const vendor = await prisma.vendor.findUnique({ where: { userId: user?.id } });
     if (!vendor) return res.status(403).json({ message: "Not a vendor." });
 
-    // Step 1 — create main product
     const product = await prisma.product.create({
       data: {
         name,
@@ -67,38 +73,62 @@ export const createProduct = async (req: Request, res: Response) => {
         price: parseFloat(price),
         stock: parseInt(stock),
         slug,
-        categoryId: parseInt(categoryId),
+        categoryId: parseInt(categoryId), 
         subCategoryId: subCategoryId ? parseInt(subCategoryId) : null,
-        brandId: parseInt(brandId) ?? null,
-        materialId: parseInt(materialId) ?? null,
-        originId: parseInt(originId) ?? null, 
-        tag: tag,
-        vendorId: vendor.id, 
+        brandId: brandId ? parseInt(brandId) : null,
+        materialId: materialId ? parseInt(materialId) : null,
+        originId: originId ? parseInt(originId) : null,
+        tag,
+        vendorId: vendor.id,
       },
     });
-   
 
-
-
-
-    // Step 3 — handle variants
+    // Create variants & sizes
     if (variants && Array.isArray(variants)) {
-      const variantData = variants.map((v: any) => ({
-        productId: product.id,
-        color: v.color, // If using string
-        size: v.size,   // If using string
-        SKU: v.SKU,
-        stock: parseInt(v.stock),
-        price: parseFloat(v.price),
-      }));
+      for (const v of variants) {
+        const variant = await prisma.productVariant.create({
+          data: {
+            productId: product.id,
+            colorId: v.colorId,
+          },
+        });
 
-      await prisma.productVariant.createMany({ data: variantData });
+        if (v.sizes && Array.isArray(v.sizes)) {
+          for (const s of v.sizes) {
+            await prisma.productVariantSize.create({
+              data: {
+                productVariantId: variant.id,
+                sizeId: s.sizeId,
+                SKU: s.SKU ?? `GEN-${product.id}-${v.colorId}`,
+                price: parseFloat(s.price.toString()),
+                stock: parseInt(s.stock.toString()),
+                discountPrice: s.discountPrice ?? null,
+                available: s.available ?? true,
+              },
+            });
+          }
+        }
+
+        // Variant images
+        if (v.images && Array.isArray(v.images)) {
+          for (const img of v.images) {
+            await prisma.productImage.create({
+              data: {
+                productVariantId: variant.id,
+                url: img.url,
+              },
+            });
+          }
+        }
+      }
     }
 
-    // Step 4 — return full product
     const fullProduct = await prisma.product.findUnique({
       where: { id: product.id },
-      include: { videos: true, variants: true },
+      include: {
+        variants: { include: { sizes: true, images: true, color: true } },
+        videos: true,
+      },
     });
 
     res.status(201).json(fullProduct);
@@ -107,12 +137,14 @@ export const createProduct = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Failed to create product.", error: err });
   }
 };
+ 
 
-    
-
+// ------------------- CREATE PRODUCT WITH IMAGE -------------------  
 export const createProductWithImage = async (req: Request, res: Response) => {
-  const uploadedFiles = (req.files as Express.Multer.File[]) || [];
   try {
+    //const { files } = req as Request & { files: Record<string, Express.Multer.File[]> };
+    const files = (req as Request & { files: Express.Multer.File[] }).files || [];
+
     const {
       name,
       description,
@@ -125,289 +157,1019 @@ export const createProductWithImage = async (req: Request, res: Response) => {
       materialId,
       originId,
       tag,
-      variants, // JSON string from frontend
+      variants, // JSON array from frontend
     } = req.body;
 
-    const user = req.user;
-    if (!user) return res.status(401).json({ message: "Unauthorized" });
-
-    // Vendor validation
-    const vendor = await prisma.vendor.findUnique({ where: { userId: user.id } });
-    if (!vendor) return res.status(403).json({ message: "Not a vendor" });
-
-    if (!categoryId || !subCategoryId)
-      return res.status(400).json({ message: "Missing category or subcategory" });
+    //log("variants:::", variants)
+    const vendorId = req.user?.id;
+    if (!vendorId) return res.status(401).json({ message: "Unauthorized" });
 
     const slug = generateSKU(name);
+
+    // Parse variants
+    let parsedVariants: any[] = [];
+    if (variants) {
+      try {
+        parsedVariants = JSON.parse(variants);
+      } catch (err) {
+        console.error("Invalid variants JSON:", err);
+      }
+    }
 
     // Step 1 — Create main product
     const product = await prisma.product.create({
       data: {
         name,
         description,
-        longDescription,
-        price: parseFloat(price),
-        stock: parseInt(stock),
+        longDescription: longDescription || null,
+        price: parseFloat(price) || 0,
+        stock: parseInt(stock) || 0,
         slug,
         categoryId: parseInt(categoryId),
+        subCategoryId: subCategoryId ? parseInt(subCategoryId) : null,
+        brandId: brandId ? parseInt(brandId) : null,
+        materialId: materialId ? parseInt(materialId) : null,
+        originId: originId ? parseInt(originId) : null,
+        tag: tag || null,
+        vendorId,
+        variants: {
+          create: parsedVariants.map((v, idx) => {
+            // Map uploaded files to this variant (based on naming convention) 
+            const variantFiles = files.filter(f => f.fieldname === `variantImages_${idx}`); 
+            console.log("variantFiles: ", variantFiles)
+            console.log("files: ", files)
+            return {
+              colorId: parseInt(v.colorId),
+              sizes: {
+                create: v.sizes?.map((s: any) => ({
+                  sizeId: parseInt(s.sizeId),
+                  price: parseFloat(s.price),
+                  stock: parseInt(s.stock),
+                  discountPrice: s.discountPrice ? parseFloat(s.discountPrice) : null,
+                  available: s.available ?? true,
+                  SKU: s.SKU || `${slug}-${v.colorId}-${s.sizeId}`,
+                  stockStatus: StockStatus.IN_STOCK,
+                })),
+              },
+              images: {
+                create: variantFiles.map((f) => ({
+                  url: `/uploads/products/images/${f.filename}`, // Save relative path
+                })),
+              },
+            };
+          }),
+        },
+      },
+      include: {
+        variants: {
+          include: {
+            sizes: true,
+            images: true,
+          },
+        },
+      },
+    });
+
+    res.status(201).json({ message: "Product created successfully", product });
+  } catch (error: any) {
+    console.error("Error creating product:", error);
+    res.status(500).json({
+      message: "Error creating product",
+      error: error.message,
+    });
+  }
+};
+
+
+// ------------------- FIND PRODUCTS BY CATEGORY -------------------
+export const findProductByCategory = async (req: Request, res: Response) => {
+  try {
+    const { categoryId } = req.params;
+
+    const products = await prisma.product.findMany({
+      where: { categoryId: parseInt(categoryId) },
+      include: {
+        vendor: true,
+        videos: true,
+        variants: { include: { images: true, sizes: true } },
+      },
+    });
+
+    res.json(products);
+  } catch (error) {
+    console.error("Error fetching products by category:", error);
+    res.status(500).json({ message: "Failed to fetch products." });
+  }
+};
+
+// ------------------- FIND PRODUCTS BY SUBCATEGORY -------------------
+export const findProductBySubCategory = async (req: Request, res: Response) => {
+  try {
+    const { categoryId, subCategoryId } = req.params;
+
+    const products = await prisma.product.findMany({
+      where: {
+        categoryId: parseInt(categoryId),
         subCategoryId: parseInt(subCategoryId),
+      },
+      include: {
+        vendor: true,
+        videos: true,
+        variants: { include: { images: true, sizes: true } },
+      },
+    });
+
+    res.json(products);
+  } catch (error) {
+    console.error("Error fetching products by subcategory:", error);
+    res.status(500).json({ message: "Failed to fetch products." });
+  }
+};
+
+// ------------------- FIND PRODUCT IMAGES BY VARIANT -------------------
+export const findProductImage = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const productImages = await prisma.productImage.findMany({
+      where: { productVariantId: parseInt(id) },
+    });
+
+    res.json(productImages);
+  } catch (error) {
+    console.error("Error fetching product images:", error);
+    res.status(500).json({ message: "Failed to fetch product images." });
+  }
+};
+
+// ------------------- GET PRODUCTS -------------------
+export const getProducts = async (req: Request, res: Response) => {
+  try {
+    const { categoryId, subCategoryId } = req.query;
+    const whereClause: any = {};
+    if (categoryId) whereClause.categoryId = Number(categoryId);
+    if (subCategoryId) whereClause.subCategoryId = Number(subCategoryId);
+
+    const products = await prisma.product.findMany({
+      where: whereClause,
+      include: {
+        vendor: true,
+        videos: true,
+        variants: {
+          include: { images: true, sizes: true, color: true },
+        },
+      },
+    });
+
+    res.json(products);
+  } catch (err) {
+    console.error("Error fetching products:", err);
+    res.status(500).json({ message: "Failed to fetch products." });
+  }
+};
+
+// ------------------- FIND PRODUCT -------------------
+export const findProduct = async (req: Request, res: Response) => {
+  try {
+    const product = await prisma.product.findUnique({
+      where: { id: parseInt(req.params.id) },
+      include: {
+        vendor: true,
+        category: true,
+        subCategory: true,
+        videos: true,
+        variants: {
+          include: { images: true, sizes: true, color: true},
+        },
+      },
+    });
+
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    res.json(product);
+  } catch (err) {
+    console.error("Error fetching product:", err);
+    res.status(500).json({ message: "Failed to fetch product." });
+  }
+};
+
+
+ 
+ 
+// ------------------- UPDATE PRODUCT -------------------
+export const updateProduct = async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const {
+      name,
+      description,
+      longDescription,
+      slug,
+      categoryId,
+      subCategoryId,
+      brandId,
+      materialId,
+      originId,
+      tag,
+    } = req.body;
+
+    const user = req.user;
+
+    // Find product
+    const product = await prisma.product.findUnique({
+      where: { id },
+      include: { vendor: true },
+    });
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    // Authorization
+    const isAdmin =
+      user?.role?.name?.toString().toUpperCase().startsWith("ADMIN") ||
+      user?.email?.startsWith("huzaifeeyunus");
+
+    const vendor = await prisma.vendor.findUnique({
+      where: { userId: user?.id },
+    });
+
+    if (!isAdmin && (!vendor || vendor.id !== product.vendorId)) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    // ✅ Update ONLY product fields
+    const updatedProduct = await prisma.product.update({
+      where: { id },
+      data: {
+        name,
+        description,
+        longDescription,
+        slug,
+        categoryId: parseInt(categoryId),
+        subCategoryId: subCategoryId ? parseInt(subCategoryId) : null,
         brandId: brandId ? parseInt(brandId) : null,
         materialId: materialId ? parseInt(materialId) : null,
         originId: originId ? parseInt(originId) : null,
         tag,
-        vendorId: vendor.id,
+      },
+      include: {
+        variants: { include: { images: true, sizes: true, color: true } },
+        videos: true,
       },
     });
 
-    // Step 2 — Parse variants
-    let parsedVariants: any[] = [];
-    if (variants) {
-      try {
-        parsedVariants = JSON.parse(variants);
-      } catch (err) {
-        console.warn("Failed to parse variants:", err);
-      }
+    res.json(updatedProduct);
+  } catch (err) {
+    console.error("Update product error:", err);
+    res.status(500).json({ message: "Failed to update product.", error: err });
+  }
+};
+ 
+// ------------------- UPDATE PRODUCT IMAGES (SYNC) -------------------
+export const updateProductImages = async (req: Request, res: Response) => {
+  try {
+    const productId = Number(req.params.id);
+    const files = req.files as Express.Multer.File[];
+
+    if (!files || files.length === 0) {
+      return res.status(400).json({ message: "No images uploaded." });
     }
 
-    // Step 3 — Create variants + images
-    for (let i = 0; i < parsedVariants.length; i++) {
-      const v = parsedVariants[i];
+    // Get current images for this product
+    const existingImages = await prisma.productImage.findMany({
+      where: { productId },
+    });
 
-      const variant = await prisma.productVariant.create({
+    // Map of current image IDs
+    const existingIds = existingImages.map((img) => img.id);
+
+    // Image IDs sent by frontend to keep (those not removed)
+    const keepIds = (req.body.keepIds
+      ? JSON.parse(req.body.keepIds)
+      : []) as number[];
+
+    // 1. Delete images not in keepIds
+    const deleteIds = existingIds.filter((id) => !keepIds.includes(id));
+    if (deleteIds.length > 0) {
+      await prisma.productImage.deleteMany({
+        where: { id: { in: deleteIds }, productId },
+      });
+    }
+
+    // 2. Add newly uploaded images
+    for (const file of files) {
+      await prisma.productImage.create({
         data: {
-          productId: product.id,
-          color: v.color,
-          size: v.size,
-          SKU: `${v.SKU}-${product.id}-${v.color}`,
-          stock: parseInt(v.stock),
-          price: parseFloat(v.price),
+          productId,
+          url: `/uploads/products/images/${file.filename}`,
         },
       });
+    }
 
-      // Handle uploaded images for this variant
-      const filesForVariant = uploadedFiles.filter(
-        (f) => f.fieldname === `variantImages_${i}`
-      );
+    // 3. Return updated product with fresh images
+    const updatedProduct = await prisma.product.findUnique({
+      where: { id: productId },
+      include: { images: true },
+    });
 
-      for (const file of filesForVariant) {
-        await prisma.productImage.create({
+    res.json(updatedProduct);
+  } catch (err) {
+    console.error("Update product images error:", err);
+    res.status(500).json({ message: "Failed to update product images.", error: err });
+  }
+};
+
+ 
+// ------------------- UPDATE PRODUCT VIDEOS (SYNC) -------------------
+export const updateProductVideos = async (req: Request, res: Response) => {
+  try {
+    const productId = Number(req.params.id);
+    const files = req.files as Express.Multer.File[];
+
+    // Get current videos for this product
+    const existingVideos = await prisma.productVideo.findMany({
+      where: { productId },
+    });
+    const existingIds = existingVideos.map((v) => v.id);
+
+    // Video IDs sent by frontend to keep
+    const keepIds = (req.body.keepIds
+      ? JSON.parse(req.body.keepIds)
+      : []) as number[];
+
+    // 1. Delete videos not in keepIds
+    const deleteIds = existingIds.filter((id) => !keepIds.includes(id));
+    if (deleteIds.length > 0) {
+      await prisma.productVideo.deleteMany({
+        where: { id: { in: deleteIds }, productId },
+      });
+    }
+
+    // 2. Add new uploaded videos
+    if (files && files.length > 0) {
+      for (const file of files) {
+        await prisma.productVideo.create({
           data: {
-            productVariantId: variant.id,
-            url: `/uploads/products/images/${file.filename}`,
+            productId,
+            url: `/uploads/products/videos/${file.filename}`,
           },
         });
       }
     }
 
-    // Step 4 — Handle product-level videos
-    const videoFiles = uploadedFiles.filter((f) => f.fieldname === "videos");
-    for (const file of videoFiles) {
-      await prisma.productVideo.create({
+    // 3. Return updated product with fresh videos
+    const updatedProduct = await prisma.product.findUnique({
+      where: { id: productId },
+      include: { videos: true },
+    });
+
+    res.json(updatedProduct);
+  } catch (err) {
+    console.error("Update product videos error:", err);
+    res.status(500).json({ message: "Failed to update product videos.", error: err });
+  }
+};
+ 
+ // ------------------- UPDATE PRODUCT WITH IMAGE/VIDEO/VARIANTS -------------------
+export const XXupdateProductWithVariantsAndImages = async (req: Request, res: Response) => { 
+  const id = Number(req.params.id);
+
+  try {
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+    const { productData, variants } = req.body;
+ 
+
+    if (!productData) {
+      return res.status(400).json({ message: "Missing productData in request." });
+    }
+
+    const parsedProduct = JSON.parse(productData);
+    const parsedVariants = variants ? JSON.parse(variants) : [];
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1) Update product base fields
+      const updatedProduct = await tx.product.update({
+        where: { id },
         data: {
-          productId: product.id,
-          url: `/uploads/products/videos/${file.filename}`,
+          name: parsedProduct.name,
+          description: parsedProduct.description,
+          longDescription: parsedProduct.longDescription,
+          slug: parsedProduct.slug,
+          categoryId: parsedProduct.categoryId,
+          subCategoryId: parsedProduct.subCategoryId,
+          brandId: parsedProduct.brandId,
+          materialId: parsedProduct.materialId,
+          originId: parsedProduct.originId,
+          tag: parsedProduct.tag,
         },
       });
-    }
 
-    // Step 5 — Return full product with variants and images
-    const fullProduct = await prisma.product.findUnique({
-      where: { id: product.id },
-      include: {
-        category: true,
-        videos: true,
-        variants: { include: { images: true } },
-      },
-    });
-
-    return res.status(201).json(fullProduct);
-  } catch (err: any) {
-    console.error("Error creating product:", err);
-    return res.status(500).json({ message: "Failed to create product", error: err.message });
-  }
-};
-
-
-
-
-// Get All Products
-export const getProducts = async (_req: Request, res: Response) => {
-  const { categoryId, subCategoryId } = _req.query; 
-  try {
-    if(categoryId && !subCategoryId){
-    const products = await prisma.product.findMany({  
-      where: { categoryId: Number(categoryId)},
-      include: {
-          vendor: true,
-          videos: true,
-          variants: {
-            include: {
-              images: true // ✅ Fetch variant images
-            }
-          }
-        }
-    });
-    res.json(products);
-
-    }else if(categoryId && subCategoryId){
-    const products = await prisma.product.findMany({       
-      where: { categoryId: Number(categoryId), subCategoryId: Number(subCategoryId)},
-        include: {
-          vendor: true,
-          videos: true,
-          variants: {
-            include: {
-              images: true // ✅ Fetch variant images
-            }
-          }
-        }
-    });
-    res.json(products);
-
-    }else{
-    const products = await prisma.product.findMany({      
-        include: {
-          vendor: true,
-          videos: true,
-          variants: {
-            include: {
-              images: true // ✅ Fetch variant images
-            }
-          }
-        }
-    });
-    res.json(products);
-
-    }
-  } catch (err) {
-    res.status(500).json({ message: "Failed to fetch products." });
-  }
-};
-
-// Get All Products
-export const findProductImage = async (_req: Request, res: Response) => {
-  try {
-    const productImage = await prisma.productImage.findMany({
-      where: { productVariantId: parseInt(_req.params.id)},
-    });
-    res.json(productImage);
-  } catch (err) {
-    res.status(500).json({ message: "Failed to fetch products." });
-  }
-};
-
-
-// Get All Products
-export const findProductByCategory = async (_req: Request, res: Response) => {
-  try {
-    const products = await prisma.product.findMany({
-      where: { categoryId: parseInt(_req.params.categoryId)},
-        include: {
-          vendor: true,
-          videos: true,
-          variants: {
-            include: {
-              images: true // ✅ Fetch variant images
-            }
-          }
-        }
-    });
-    res.json(products);
-  } catch (err) {
-    res.status(500).json({ message: "Failed to fetch products." });
-  }
-};
-
-
-// Get All Products
-export const findProductBySubCategory = async (_req: Request, res: Response) => {
-  const { categoryId, subCategoryId } = _req.query;
-  try {
-    const products = await prisma.product.findMany({
-      where: { categoryId: parseInt(_req.params.categoryId), subCategoryId: parseInt(_req.params.subCategoryId)},
-        include: {
-          vendor: true,
-          videos: true,
-          variants: {
-            include: {
-              images: true // ✅ Fetch variant images
-            }
-          }
-        }
-    });
-    res.json(products);
-  } catch (err) {
-    res.status(500).json({ message: "Failed to fetch products." });
-  }
-};
-
-
-
-// Find A Products
-export const findProduct = async (req: Request, res: Response) => {  
-  try { 
-      const product = await prisma.product.findUnique({
-        where: { id: parseInt(req.params.id) },
-        include: {
-          vendor: true,
-          videos: true,
-          variants: {
-            include: {
-              images: true // ✅ Fetch variant images
-            }
-          }
-        }
+      // 2) Sync product images
+      const keepImageIds: number[] = parsedProduct.keepImageIds ?? [];
+      await tx.productImage.deleteMany({
+        where: { productId: id, id: { notIn: keepImageIds } },
       });
-    
-    if (!product) {
-      return res.status(404).json({ error: "Product not found" });
-    }
-    res.json(product);
+      if (files?.images) {
+        for (const img of files.images) {
+          await tx.productImage.create({
+            data: {
+              productId: id, 
+              url: `/uploads/products/images/${img.filename}`,
+            },
+          });
+        }
+      }
+
+      // 3) Sync product videos
+      const keepVideoIds: number[] = parsedProduct.keepVideoIds ?? [];
+      await tx.productVideo.deleteMany({
+        where: { productId: id, id: { notIn: keepVideoIds } },
+      });
+      if (files?.videos) {
+        for (const vid of files.videos) {
+          await tx.productVideo.create({
+            data: {
+              productId: id,
+              url: `/uploads/products/videos/${vid.filename}`,
+            },
+          });
+        }
+      }
+
+      // 4) Sync variants
+      const keepVariantIds = parsedVariants.map((v: any) => v.id).filter((id: any) => id);
+      await tx.productVariant.deleteMany({
+        where: { productId: id, id: { notIn: keepVariantIds } },
+      });
+
+      for (const variant of parsedVariants) {
+        let variantId = variant.id;
+
+        if (variantId) {
+          // Update existing variant
+          await tx.productVariant.update({
+            where: { id: variantId },
+            data: {
+              colorId: variant.colorId, 
+            },
+          });
+        } else {
+          // Create new variant
+          const newVariant = await tx.productVariant.create({
+            data: {
+              productId: id,
+              colorId: variant.colorId, 
+            },
+          });
+          variantId = newVariant.id;
+        }
+ 
+        // --- Variant Images ---
+        const keepVariantImageIds: number[] = variant.keepImageIds ?? [];
+        await tx.productImage.deleteMany({
+          where: { productVariantId: variantId, id: { notIn: keepVariantImageIds } },
+        });
+          /* 
+        const variantImageFiles = Array.isArray(files) 
+                                  ? files.filter((f,vi) => f.fieldname === `variant_${vi}_images`)
+                                  : [];  */
+  
+        const variantImageFiles = Array.isArray(files) 
+                                  ? files.filter((f,fi) => f.fieldname.toString().includes(`variant_${fi}_images`))
+                                  : []; 
+                                  
+                                  
+                                   
+         log("variantImageFiles::: ",variantImageFiles);
+        if (variantImageFiles.length > 0) {  
+          for (const img of variantImageFiles) {  
+            await tx.productImage.create({
+              data: {
+                productId: id,
+                productVariantId: variantId,
+                url: `/uploads/products/images/${img.filename}`,
+              },
+            });
+          }
+        }
+ 
+        // --- Variant Sizes ---
+        const keepSizeIds = variant.sizes.map((s: any) => s.id).filter((id: any) => id);
+        await tx.productVariantSize.deleteMany({
+          where: { productVariantId: variantId, id: { notIn: keepSizeIds } },
+        });
+
+        for (const size of variant.sizes) {
+          if (size.id) {
+            await tx.productVariantSize.update({
+              where: { id: size.id },
+              data: {
+                sizeId: size.sizeId,
+                price: size.price,
+                stock: size.stock,
+              },
+            });
+          } else {
+            await tx.productVariantSize.create({
+              data: {
+                productVariantId: variantId,
+                sizeId: size.sizeId,
+                price: size.price,
+                stock: size.stock,
+              },
+            });
+          }
+        }
+      }
+
+
+      // 6) Return updated product
+      return tx.product.findUnique({
+        where: { id },
+        include: {
+          images: true,
+          videos: true,
+          variants: {
+            include: {
+              images: true,
+              sizes: { include: { size: true } },
+              color: true,
+            },
+          },
+          category: true,
+          brand: true,
+        },
+      });
+    });
+
+      // 5) Recalculate stock/price aggregates
+      await syncProductFromVariants(id);
+    res.json(result);
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch products." });
+    console.error("Update product error:", err);
+    res.status(500).json({ message: "Failed to update product.", error: err });
+  }
+};
+
+// ------------------- UPDATE PRODUCT WITH IMAGE/VIDEO/VARIANTS -------------------
+export const NNupdateProductWithVariantsAndImages = async (req: Request, res: Response) => { 
+  const id = Number(req.params.id);
+
+  try {
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+    const { productData, variants } = req.body;
+
+    if (!productData) {
+      return res.status(400).json({ message: "Missing productData in request." });
+    }
+ console.log("BODY", req.body);
+console.log("FILES", files);
+    const parsedProduct = JSON.parse(productData);
+    const parsedVariants = variants ? JSON.parse(variants) : [];
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1) Update product base fields
+      const updatedProduct = await tx.product.update({
+        where: { id },
+        data: {
+          name: parsedProduct.name,
+          description: parsedProduct.description,
+          longDescription: parsedProduct.longDescription,
+          slug: parsedProduct.slug,
+          categoryId: parsedProduct.categoryId,
+          subCategoryId: parsedProduct.subCategoryId,
+          brandId: parsedProduct.brandId,
+          materialId: parsedProduct.materialId,
+          originId: parsedProduct.originId,
+          tag: parsedProduct.tag,
+        },
+      });
+
+      // 2) Sync product images (only delete if keepImageIds explicitly sent)
+      if (parsedProduct.keepImageIds) {
+        const keepImageIds: number[] = parsedProduct.keepImageIds;
+        await tx.productImage.deleteMany({
+          where: { productId: id, id: { notIn: keepImageIds } },
+        });
+      }
+      if (files?.images) {
+        for (const img of files.images) {
+          await tx.productImage.create({
+            data: {
+              productId: id, 
+              url: `/uploads/products/images/${img.filename}`,
+            },
+          });
+        }
+      }
+
+      // 3) Sync product videos (same treatment as images)
+      if (parsedProduct.keepVideoIds) {
+        const keepVideoIds: number[] = parsedProduct.keepVideoIds;
+        await tx.productVideo.deleteMany({
+          where: { productId: id, id: { notIn: keepVideoIds } },
+        });
+      }
+      if (files?.videos) {
+        for (const vid of files.videos) {
+          await tx.productVideo.create({
+            data: {
+              productId: id,
+              url: `/uploads/products/videos/${vid.filename}`,
+            },
+          });
+        }
+      }
+
+      // 4) Sync variants
+      const keepVariantIds = parsedVariants.map((v: any) => v.id).filter((id: any) => id);
+      await tx.productVariant.deleteMany({
+        where: { productId: id, id: { notIn: keepVariantIds } },
+      });
+
+      for (const variant of parsedVariants) {
+        let variantId = variant.id;
+
+        if (variantId) {
+          await tx.productVariant.update({
+            where: { id: variantId },
+            data: { colorId: variant.colorId },
+          });
+        } else {
+          const newVariant = await tx.productVariant.create({
+            data: { productId: id, colorId: variant.colorId },
+          });
+          variantId = newVariant.id;
+        }
+
+        // --- Variant Images ---
+        if (variant.keepImageIds) {
+          const keepVariantImageIds: number[] = variant.keepImageIds;
+          await tx.productImage.deleteMany({
+            where: { productVariantId: variantId, id: { notIn: keepVariantImageIds } },
+          });
+        }
+
+        const variantImageFiles = Array.isArray(files) 
+          ? files.filter((f: any, i) => f.fieldname?.includes(`variant_${i}_images`))
+          : [];
+
+        if (variantImageFiles.length > 0) {
+          for (const img of variantImageFiles) {
+            await tx.productImage.create({
+              data: {
+                productId: id,
+                productVariantId: variantId,
+                url: `/uploads/products/images/${img.filename}`,
+              },
+            });
+          }
+        }
+
+        // --- Variant Sizes ---
+        const keepSizeIds = variant.sizes.map((s: any) => s.id).filter((id: any) => id);
+        await tx.productVariantSize.deleteMany({
+          where: { productVariantId: variantId, id: { notIn: keepSizeIds } },
+        });
+
+        for (const size of variant.sizes) {
+          if (size.id) {
+            await tx.productVariantSize.update({
+              where: { id: size.id },
+              data: {
+                sizeId: size.sizeId,
+                price: size.price,
+                stock: size.stock,
+              },
+            });
+          } else {
+            await tx.productVariantSize.create({
+              data: {
+                productVariantId: variantId,
+                sizeId: size.sizeId,
+                price: size.price,
+                stock: size.stock,
+              },
+            });
+          }
+        }
+      }
+
+      // 5) Return updated product
+      return tx.product.findUnique({
+        where: { id },
+        include: {
+          images: true,
+          videos: true,
+          variants: {
+            include: {
+              images: true,
+              sizes: { include: { size: true } },
+              color: true,
+            },
+          },
+          category: true,
+          brand: true,
+        },
+      });
+    });
+
+    // 6) Recalculate stock/price aggregates
+    await syncProductFromVariants(id);
+
+    res.json(result);
+  } catch (err) {
+    console.error("Update product error:", err);
+    res.status(500).json({ message: "Failed to update product.", error: err });
   }
 };
 
 
-//syncProductFromVariants 
+// ------------------- UPDATE PRODUCT WITH IMAGE/VIDEO/VARIANTS ------------------- 
+export const  updateProductWithVariantsAndImages = async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+
+  try {
+    // Accept both shapes from multer:
+    // - upload.any() -> req.files is an array of files
+    // - upload.fields(...) -> req.files is an object keyed by fieldname
+    const rawFiles: any = req.files || [];
+    const { productData, variants } = req.body;
+
+    if (!productData) {
+      return res.status(400).json({ message: "Missing productData in request." });
+    }
+
+    // Parse JSON payloads
+    const parsedProduct = JSON.parse(productData);
+    const parsedVariants = variants ? JSON.parse(variants) : [];
+
+    // Parse global removed arrays if frontend sent them (they may be JSON strings)
+    const removedVariantIds = req.body.removedVariantIds ? JSON.parse(req.body.removedVariantIds) : [];
+    const removedSizeIds = req.body.removedSizeIds ? JSON.parse(req.body.removedSizeIds) : [];
+    const removedImageIds = req.body.removedImageIds ? JSON.parse(req.body.removedImageIds) : [];
+
+    // Build a map: variantId -> uploaded files[]
+    const filesByVariant: Record<number, Express.Multer.File[]> = {};
+    const productLevelFiles: Express.Multer.File[] = [];
+
+    // Helper to push file(s) into map
+    const pushFileToVariant = (variantId: number, file: Express.Multer.File | Express.Multer.File[]) => {
+      if (!filesByVariant[variantId]) filesByVariant[variantId] = [];
+      if (Array.isArray(file)) filesByVariant[variantId].push(...file);
+      else filesByVariant[variantId].push(file);
+    };
+
+    // Normalize rawFiles (array or object)
+    if (Array.isArray(rawFiles)) {
+      // req.files is an array of files (upload.any())
+      for (const f of rawFiles) {
+        const field = (f.fieldname || "").toString();
+        const m = field.match(/^(\d+)_variant_\d+_images$/);
+        if (m) {
+          pushFileToVariant(Number(m[1]), f);
+        } else if (field === "images") {
+          productLevelFiles.push(f);
+        }
+      }
+    } else if (typeof rawFiles === "object" && rawFiles !== null) {
+      // req.files is an object keyed by fieldname (upload.fields)
+      for (const key of Object.keys(rawFiles)) {
+        const val = rawFiles[key];
+        const m = key.match(/^(\d+)_variant_\d+_images$/);
+        if (m) {
+          const vid = Number(m[1]);
+          if (Array.isArray(val)) pushFileToVariant(vid, val);
+          else pushFileToVariant(vid, val as Express.Multer.File);
+        } else if (key === "images") {
+          if (Array.isArray(val)) productLevelFiles.push(...val);
+          else productLevelFiles.push(val as Express.Multer.File);
+        }
+      }
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1) Update product base fields
+      const updatedProduct = await tx.product.update({
+        where: { id },
+        data: {
+          name: parsedProduct.name,
+          description: parsedProduct.description,
+          longDescription: parsedProduct.longDescription,
+          slug: parsedProduct.slug,
+          categoryId: parsedProduct.categoryId,
+          subCategoryId: parsedProduct.subCategoryId,
+          brandId: parsedProduct.brandId,
+          materialId: parsedProduct.materialId,
+          originId: parsedProduct.originId,
+          tag: parsedProduct.tag,
+        },
+      });
+
+      // 2) Sync product-level images
+      // If parsedProduct.keepImageIds provided -> delete others. If not provided -> don't delete anything.
+      const keepImageIds: number[] | null = parsedProduct.keepImageIds ?? null;
+      if (Array.isArray(keepImageIds)) {
+        await tx.productImage.deleteMany({
+          where: { productId: id, id: { notIn: keepImageIds } },
+        });
+      }
+      // Delete any explicitly removed images (global)
+      if (Array.isArray(removedImageIds) && removedImageIds.length > 0) {
+        await tx.productImage.deleteMany({
+          where: { id: { in: removedImageIds } },
+        });
+      }
+      // Save uploaded product-level images (if any)
+      if (productLevelFiles.length > 0) {
+        for (const img of productLevelFiles) {
+          await tx.productImage.create({
+            data: {
+              productId: id,
+              url: `/uploads/products/images/${img.filename}`,
+            },
+          });
+        }
+      }
+
+      // 3) Sync product videos (keeps old approach — only delete if keepVideoIds provided)
+      const keepVideoIds: number[] = parsedProduct.keepVideoIds ?? [];
+      if (Array.isArray(parsedProduct.keepVideoIds)) {
+        await tx.productVideo.deleteMany({
+          where: { productId: id, id: { notIn: keepVideoIds } },
+        });
+      }
+      if (rawFiles && ((rawFiles as any).videos || (rawFiles as any)["videos"])) {
+        // if videos were uploaded under 'videos' key (handle both shapes)
+        const videoFiles: Express.Multer.File[] = [];
+        if (Array.isArray(rawFiles)) {
+          for (const f of rawFiles as any[]) if (f.fieldname === "videos") videoFiles.push(f);
+        } else if (rawFiles.videos) {
+          if (Array.isArray(rawFiles.videos)) videoFiles.push(...rawFiles.videos);
+          else videoFiles.push(rawFiles.videos);
+        }
+        for (const v of videoFiles) {
+          await tx.productVideo.create({
+            data: { productId: id, url: `/uploads/products/videos/${v.filename}` },
+          });
+        }
+      }
+
+      // 4) Sync variants (delete missing variants only if parsedVariants provides ids)
+      const keepVariantIds = parsedVariants.map((v: any) => v.id).filter((x: any) => x);
+      if (keepVariantIds.length > 0) {
+        await tx.productVariant.deleteMany({
+          where: { productId: id, id: { notIn: keepVariantIds } },
+        });
+      } else if (Array.isArray(removedVariantIds) && removedVariantIds.length > 0) {
+        // If frontend sends removedVariantIds explicitly, remove those
+        await tx.productVariant.deleteMany({
+          where: { id: { in: removedVariantIds } },
+        });
+      }
+
+      // Process each variant from frontend payload
+      for (const variant of parsedVariants) {
+        // Keep the original incoming id (could be 0)
+        const incomingVariantId = variant.id ?? 0;
+        let variantId = incomingVariantId;
+
+        if (variantId && variantId > 0) {
+          // Update existing variant
+          await tx.productVariant.update({
+            where: { id: variantId },
+            data: {
+              colorId: variant.colorId,
+            },
+          });
+        } else {
+          // Create new variant
+          const newVariant = await tx.productVariant.create({
+            data: {
+              productId: id,
+              colorId: variant.colorId,
+            },
+          });
+          variantId = newVariant.id;
+        }
+
+        // --- Variant Images ---
+        // The frontend may send existingImageIds (kept ones) or keepImageIds.
+        const existingImageIds: number[] | undefined = variant.existingImageIds ?? variant.keepImageIds;
+
+        if (Array.isArray(existingImageIds)) {
+          // delete any images belonging to this variant that are NOT in the existingImageIds array
+          await tx.productImage.deleteMany({
+            where: { productVariantId: variantId, id: { notIn: existingImageIds } },
+          });
+        }
+
+        // Attach uploaded images for this variant.
+        // Use filesByVariant[incomingVariantId] (so files uploaded under `0_variant_*` are attached to newly created variants)
+        const filesForThisVariant = (filesByVariant[incomingVariantId] ?? filesByVariant[variantId] ?? []) as Express.Multer.File[];
+        if (filesForThisVariant.length > 0) {
+          for (const img of filesForThisVariant) {
+            await tx.productImage.create({
+              data: {
+                productId: id,
+                productVariantId: variantId,
+                url: `/uploads/products/images/${img.filename}`,
+              },
+            });
+          }
+        }
+
+        // --- Variant Sizes ---
+        const keepSizeIds = (variant.sizes ?? []).map((s: any) => s.id).filter((x: any) => x);
+        if (keepSizeIds.length > 0) {
+          await tx.productVariantSize.deleteMany({
+            where: { productVariantId: variantId, id: { notIn: keepSizeIds } },
+          });
+        } else if (Array.isArray(removedSizeIds) && removedSizeIds.length > 0) {
+          // if removedSizeIds sent globally, remove them (they may belong to different variants)
+          await tx.productVariantSize.deleteMany({
+            where: { id: { in: removedSizeIds } },
+          });
+        }
+
+        for (const size of variant.sizes ?? []) {
+          if (size.id && size.id > 0) {
+            await tx.productVariantSize.update({
+              where: { id: size.id },
+              data: {
+                sizeId: size.sizeId,
+                price: size.price,
+                stock: size.stock,
+              },
+            });
+          } else {
+            await tx.productVariantSize.create({
+              data: {
+                productVariantId: variantId,
+                sizeId: size.sizeId,
+                price: size.price,
+                stock: size.stock,
+              },
+            });
+          }
+        }
+      }
+
+      // 6) Return updated product with relations
+      return tx.product.findUnique({
+        where: { id },
+        include: {
+          images: true,
+          videos: true,
+          variants: {
+            include: {
+              images: true,
+              sizes: { include: { size: true } },
+              color: true,
+            },
+          },
+          category: true,
+          brand: true,
+        },
+      });
+    });
+
+    // 7) Recalculate stock/price aggregates
+    await syncProductFromVariants(id);
+
+    res.json(result);
+  } catch (err) {
+    console.error("Update product error:", err);
+    res.status(500).json({ message: "Failed to update product.", error: (err as Error).message });
+  }
+};
+
+
+
+// ------------------- SYNC PRODUCT FUNCTION -------------------
 async function syncProductFromVariants(productId: number) {
-  const variants: any[] = await prisma.productVariant.findMany({
-    where: { productId },
-    select: {
-      color: true, size: true, SKU: true,
-      price: true,
-      discountPrice: true,
-      stock: true,
-      stockStatus: true,
-      available: true,
-    },
+  const sizes = await prisma.productVariantSize.findMany({
+    where: { variant: { productId } },
+    select: { price: true, discountPrice: true, stock: true, available: true },
   });
 
-
-
-  if (variants.length === 0) {
-    // No variants, maybe reset product fields
+  if (!sizes.length) {
     await prisma.product.update({
       where: { id: productId },
       data: {
         price: 0,
         discountPrice: null,
         stock: 0,
-        stockStatus: "Out of Stock",
         available: false,
+        stockStatus: StockStatus.OUT_OF_STOCK,
       },
     });
     return;
   }
- 
-  const minPrice = Math.min(...variants.map(v => v.price));
-  const minDiscount = Math.min(
-    ...variants.map(v => v.discountPrice ?? Number.MAX_VALUE)
-  );
-  const totalStock = variants.reduce((sum, v) => sum + v.stock, 0);
-  const anyAvailable = variants.some(v => v.available);
 
-  const stockStatus = totalStock > 0 ? "In Stock" : "Out of Stock";
+  const minPrice = Math.min(...sizes.map((s) => s.price));
+  const minDiscount = Math.min(...sizes.map((s) => s.discountPrice ?? Number.MAX_VALUE));
+  const totalStock = sizes.reduce((sum, s) => sum + s.stock, 0);
+  const anyAvailable = sizes.some((s) => s.available);
+  const stockStatus = totalStock > 0 ? StockStatus.IN_STOCK : StockStatus.OUT_OF_STOCK;
 
   await prisma.product.update({
     where: { id: productId },
@@ -415,681 +1177,124 @@ async function syncProductFromVariants(productId: number) {
       price: minPrice,
       discountPrice: minDiscount === Number.MAX_VALUE ? null : minDiscount,
       stock: totalStock,
-      stockStatus,
       available: anyAvailable,
+      stockStatus,
     },
   });
 }
 
-
-// Update Product 
- 
-
-export const updateProductWithImage = async (req: Request, res: Response) => {  
-  const { files } = req as Request & { files: MulterFiles };
-  
-  const id = req.params.id;  
-   
-  try {
-    const {
-      vendorId, name, description, longDescription, price, stock, categoryId, subCategoryId,
-      brandId, materialId, originId, tag, variants 
-      // This will be an array from the formData 
-    } = req.body;
-
-    const user = req.user;
-
-    let slug = generateSKU(name);
-    
-    if (!subCategoryId || !categoryId) {
-      return res.status(400).json({ message: "Missing category or subcategory." });
-    }
- 
-    const vendor = await prisma.vendor.findFirst({ where: { userId: parseInt(vendorId) } }); 
-    if (!vendor) return res.status(403).json({ message: "Not a vendor." });
-   
-
-    // Step 1 — create main product
-    const product = await prisma.product.update({
-      where: { id: parseInt(id) },
-      data: {
-        name,
-        description,
-        longDescription,
-        price: 0,
-        stock: 0,
-        slug,
-        categoryId: parseInt(categoryId),
-        subCategoryId: subCategoryId ? parseInt(subCategoryId) : null,
-        brandId: parseInt(brandId)  ?? null,
-        materialId: parseInt(materialId)  ?? null,
-        originId: parseInt(originId)  ?? null, 
-        tag: tag, 
-        vendorId: vendor.id  ?? null, 
-      },
-    });
-
-  
-
-// Example: variantImagesMap[0] = [File, File, ...]
-    const vfiles = req.files as Express.Multer.File[];
-    const variantImagesMap: Record<number, Express.Multer.File[]> = {};
-    try{ 
-        vfiles.forEach((file) => {
-          const match = file.fieldname.match(/^variantImages_(\d+)$/);
-          if (match) {
-            const index = parseInt(match[1], 10);
-            if (!variantImagesMap[index]) {
-              variantImagesMap[index] = [];
-            }
-            variantImagesMap[index].push(file);
-          }
-    }); 
-    }catch(err){
-
-        console.error("found err------: ", err);
-    }  
-// Example: variantImagesMap[0] = [File, File, ...]
-// Step 3 — handle variants
- 
-
-// Step 3 — handle variants
-let parsedVariants: any[] = [];
-if (req.body.variants) {
-  try {
-    parsedVariants = JSON.parse(req.body.variants);
-  } catch {
-    console.warn("Could not parse variants");
-  }
-}
-
-if (parsedVariants.length) {
-  // Get existing variants for this product
-const existingVariants: any[] = await prisma.productVariant.findMany({
-  where: { productId: product.id},
-  select: {
-    id: true,
-    color: true,
-    size: true,
-    SKU: true,
-    price: true,
-    stock: true,
-    available: true,
-  },
-});
-
-
-  const existingIds = existingVariants.map(v => v.id);
-  const incomingIds = parsedVariants.filter(v => v.id).map(v => v.id);
-
-  // Delete variants that were removed from the request
-  const idsToDelete = existingIds.filter(id => !incomingIds.includes(id));
-  if (idsToDelete.length) {
-    await prisma.productVariant.deleteMany({
-      where: { id: { in: idsToDelete.filter((id): id is number => id !== undefined) } },
-    });
-  }
-
-  // Create or update variants
-  await Promise.all(
-    parsedVariants.map(async (v: any) => {
-      const variantData = {
-        productId: product.id,
-        color: v.color,
-        size: v.size,
-        SKU: v.SKU,
-        stock: parseInt(v.stock),
-        price: parseFloat(v.price),
-      };
-
-      if (v.id) {
-        await prisma.productVariant.update({
-          where: { id: v.id },
-          data: variantData,
-        });
-      } else {
-        await prisma.productVariant.create({ data: variantData });
-      }
-    })
-  );
-}
-
-// Sync product stock/price from variants
-await syncProductFromVariants(product.id);
-
-// Fetch updated variants for image mapping
-const updatedVariants = await prisma.productVariant.findMany({
-  where: { productId: product.id },
-});
-
-// Save images for each variant
-for (const [variantIndex, imageFiles] of Object.entries(variantImagesMap)) {
-  const variantId = updatedVariants[parseInt(variantIndex, 10)]?.id;
-  if (!variantId) continue;
-
-  await Promise.all(
-    imageFiles.map(file =>
-      prisma.productImage.create({
-        data: { 
-          productVariantId: variantId,
-          url: `/uploads/products/images/${file.filename}`,
-        },
-      })
-    )
-  );
-}
-
-// Handle videos
-const videoFiles = files.videos || [];
-if (videoFiles.length > 0) {
-  await Promise.all(
-    videoFiles.map(file =>
-      prisma.productVideo.create({
-        data: {
-          productId: product.id,
-          url: `/uploads/products/videos/${file.filename}`,
-        },
-      })
-    )
-  );
-}
-
-
-
-
-    
-    // Step 4 — return full product
-   const fullProduct = await prisma.product.findUnique({
-  where: { id: product.id },
-  include: {
-    videos: true,
-    category: true,
-    variants: {
-      include: {
-        images: true, // <-- This is the key fix
-      },
-    },
-  },
-});
-
-
-    res.status(201).json(fullProduct);
-  } catch (err) {
-    console.error("Error update product:", err);
-    res.status(500).json({ message: "Failed to update product.", error: err });
-  }
-};
-
-
- 
-// controllers/product.controller.ts  // controllers/productController.ts
- // controllers/productController.ts 
-
-export const updateProductImage = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const { vendorId, name, description, longDescription } = req.body;
-
-    // Parse variants JSON safely
-    let variantsData: any[] = [];
-    try {
-      variantsData = JSON.parse(req.body.variants || "[]");
-    } catch (err) {
-      return res.status(400).json({ message: "Invalid variants JSON" });
-    }
-
-    // Fetch product with variants + images
-    const product = await prisma.product.findUnique({
-      where: { id: Number(id) },
-      include: { variants: { include: { images: true } } },
-    });
-
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    }
-
-    // Update main product
-    await prisma.product.update({
-      where: { id: Number(id) },
-      data: {
-        vendorId: Number(vendorId),
-        name,
-        description,
-        longDescription,
-      },
-    });
-
-    // Normalize uploaded files (from Multer)
-    const uploadedFiles: Express.Multer.File[] = Array.isArray(req.files)
-      ? (req.files as Express.Multer.File[])
-      : [];
-
-    // Track variant IDs we are keeping
-    const incomingVariantIds = variantsData.filter(v => v.id).map(v => v.id);
-
-    // 🔹 Remove variants that were deleted on frontend
-    await prisma.productVariant.deleteMany({
-      where: {
-        productId: Number(id),
-        id: { notIn: incomingVariantIds }, // delete variants not sent
-      },
-    });
-
-    // 🔹 Process each variant from frontend
-    for (let i = 0; i < variantsData.length; i++) {
-      const variant = variantsData[i];
-
-      if (variant.id) {
-        // --- Update existing variant ---
-        await prisma.productVariant.update({
-          where: { id: variant.id },
-          data: {
-            color: variant.color,
-            size: variant.size,
-            SKU: variant.SKU,
-            price: Number(variant.price),
-            stock: Number(variant.stock),
-          },
-        });
-
-        // Keep only preserved images
-        const preservedImageIds = variant.images
-          .filter((img: any) => img.id)
-          .map((img: any) => img.id);
-
-        await prisma.productImage.deleteMany({
-          where: {
-            productVariantId: variant.id,
-            id: { notIn: preservedImageIds },
-          },
-        });
-
-        // Save new uploaded images for this variant
-        const filesForVariant = uploadedFiles.filter(
-          (f) => f.fieldname === `variantImages_${i}`
-        );
-
-        for (const file of filesForVariant) {
-          await prisma.productImage.create({
-            data: {
-              url: `/uploads/products/images/${file.filename}`,
-              productVariantId: variant.id,
-            },
-          });
-        }
-      } else {
-        // --- Create new variant ---
-        const newVariant = await prisma.productVariant.create({
-          data: {
-            productId: Number(id),
-            color: variant.color,
-            size: variant.size,
-            SKU: variant.SKU,
-            price: Number(variant.price),
-            stock: Number(variant.stock),
-          },
-        });
-
-        // Save uploaded images for new variant
-        const filesForVariant = uploadedFiles.filter(
-          (f) => f.fieldname === `variantImages_${i}`
-        );
-
-        for (const file of filesForVariant) {
-          await prisma.productImage.create({
-            data: {
-              url: `/uploads/products/images/${file.filename}`,
-              productVariantId: newVariant.id,
-            },
-          });
-        }
-      }
-    }
-
-    res.json({ success: true, message: "Product & variants updated successfully" });
-  } catch (error: any) {
-    console.error("Update product error:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-};
-
-
-
-
-
-
-
-export const updateProductVideo = async (req: Request, res: Response) => {  
-  const { files } = req as Request & { files: MulterFiles };
-  
-  const productid = Number(req.params.id);  
-   
-  try {
-    const {
-      vendorId, name, description, longDescription, categoryId, subCategoryId,
-      brandId, materialId, originId  
-      // This will be an array from the formData 
-    } = req.body;
-
-    const user = req.user;
- 
-     
- 
-    const vendor = await prisma.vendor.findFirst({ where: { userId: parseInt(vendorId) } }); 
-    if (!vendor) {
-      if(!user?.email.toString().includes("huzaifeeyunus")){
-        return res.status(403).json({ message: "Not a vendor." });
-
-      }
-    }
- 
-   
-    const product = await prisma.product.update({
-      where: { id: productid },
-      data: {
-        name,
-        description,
-        longDescription
-      },
-    });
-
-// Handle videos
-const videoFiles = files.videos || [];
-if (videoFiles.length > 0) {
-  await Promise.all(
-    videoFiles.map(file =>
-      prisma.productVideo.create({
-        data: {
-          productId: productid,
-          url: `/uploads/products/videos/${file.filename}`,
-        },
-      })
-    )
-  );
-}
-
-
-
-
-    
-    // Step 4 — return full product
-   const fullProduct = await prisma.product.findUnique({
-  where: { id: productid },
-  include: {
-    videos: true,
-    category: true,
-    variants: {
-      include: {
-        images: true, // <-- This is the key fix
-      },
-    },
-  },
-});
-
-
-    res.status(201).json(fullProduct);
-  } catch (err) {
-    console.error("Error updating product video:", err);
-    res.status(500).json({ message: "Failed to update product video.", error: err });
-  }
-};
-
-
-export const updateProduct = async (req: Request, res: Response) => {  
-  //const { files } = req as Request & { files: MulterFiles };
-  
-  const id = req.params.id;  
-   
-  try {
-    const {
-      vendorId, name, description, longDescription, price, stock, categoryId, subCategoryId,
-      brandId, materialId, originId, tag, variants 
-      // This will be an array from the formData 
-    } = req.body;
-
-    const user = req.user;
-
-    let slug = generateSKU(name);
-    
-    if (!subCategoryId || !categoryId) {
-      return res.status(400).json({ message: "Missing category or subcategory." });
-    }
-  
-   
-    const vendor = await prisma.vendor.findFirst({ where: { userId: parseInt(vendorId) } }); 
-    if (!vendor) {
-      if(!user?.email.toString().includes("huzaifeeyunus@gmail.com")){
-        return res.status(403).json({ message: "Not a vendor." });
-
-      }
-    }
-
-    // Step 1 — create main product
-    const product = await prisma.product.update({
-      where: { id: parseInt(id) },
-      data: {
-        name,
-        description,
-        longDescription,
-        price: 0,
-        stock: 0,
-        slug,
-        categoryId: parseInt(categoryId),
-        subCategoryId: subCategoryId ? parseInt(subCategoryId) : null,
-        brandId: parseInt(brandId) ?? null,
-        materialId: parseInt(materialId) ?? null,
-        originId: parseInt(originId) ?? null, 
-        tag: tag, 
-        vendorId: vendor?.id, 
-      },
-    });
-
-  
- 
-    
-    // Step 4 — return full product
-   const fullProduct = await prisma.product.findUnique({
-  where: { id: product.id },
-  include: {
-    videos: true,
-    category: true,
-    variants: {
-      include: {
-        images: true, // <-- This is the key fix
-      },
-    },
-  },
-});
-
-
-    res.status(201).json(fullProduct);
-  } catch (err) {
-    console.error("Error update product:", err);
-    res.status(500).json({ message: "Failed to update product.", error: err });
-  }
-};
-  
-
-// Delete Product and all related records
-export const deleteProducttt = async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
-  const user = req.user;
-
-  try {
-    const vendor = await prisma.vendor.findUnique({
-      where: { userId: user?.id },
-    });
-
-    if (!vendor) {
-      if (!user?.email.startsWith("huzaifeeyunus")) {
-        return res.status(403).json({ message: "Not a vendor." });
-      }
-    }
-
-    // 1️⃣ Find all variants of this product
-    const variants = await prisma.productVariant.findMany({
-      where: { productId: id },
-      select: { id: true },
-    });
-
-    const variantIds = variants.map(v => v.id);
-
-    // 2️⃣ Delete all product images for these variants
-    if (variantIds.length > 0) {
-      await prisma.productImage.deleteMany({
-        where: { productVariantId: { in: variantIds } },
-      });
-    }
-
-    // 3️⃣ Delete all variants
-    await prisma.productVariant.deleteMany({
-      where: { productId: id },
-    });
-
-    // 4️⃣ Delete ratings and reviews
-    await prisma.rating.deleteMany({ where: { productId: id } });
-    await prisma.review.deleteMany({ where: { productId: id } });
-
-    // 5️⃣ Delete cart items and order items referencing this product
-    await prisma.cartItem.deleteMany({ where: { productId: id } });
-    await prisma.orderItem.deleteMany({ where: { productId: id } });
-
-    // 6️⃣ Finally delete the product itself
-    await prisma.product.delete({ where: { id } });
-
-    res.json({ message: "Product and all related data deleted successfully." });
-  } catch (err) {
-    console.error("Error deleting product:", err);
-    res.status(500).json({ message: "Failed to delete product." });
-  }
-};
-
-
-
-// controllers/productController.ts 
-
-export const deleteProductVariantttt = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-
-    // Check if variant exists
-    const variant = await prisma.productVariant.findUnique({
-      where: { id: Number(id) },
-      include: { images: true },
-    });
-
-    if (!variant) {
-      return res.status(404).json({ message: "Variant not found" });
-    }
-
-    // Delete all images related to this variant
-    await prisma.productImage.deleteMany({
-      where: { productVariantId: variant.id },
-    });
-
-    // Delete the variant itself
-    await prisma.productVariant.delete({
-      where: { id: variant.id },
-    });
-
-    res.json({ success: true, message: "Variant deleted successfully" });
-  } catch (error: any) {
-    console.error("Delete variant error:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-};
-
-
-
-
+// ------------------- DELETE PRODUCT -------------------
 export const deleteProduct = async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id);
-  const user = req.user;
-
   try {
-    // Check vendor ownership unless admin
+    const id = Number(req.params.id);
+    const user = req.user;
+
     const product = await prisma.product.findUnique({
       where: { id },
       include: { vendor: true },
     });
+    if (!product) return res.status(404).json({ message: "Product not found." });
 
-    if (!product) {
-      return res.status(404).json({ message: "Product not found." });
+    const isAdmin =
+      user?.role?.toString().toUpperCase() === "ADMIN" ||
+      user?.email.startsWith("huzaifeeyunus");
+    const vendor = await prisma.vendor.findUnique({ where: { userId: user?.id } });
+
+    if (!isAdmin && (!vendor || vendor.id !== product.vendorId))
+      return res.status(403).json({ message: "Not authorized." });
+
+    // Delete all variants & their related data
+    const variantIds = (
+      await prisma.productVariant.findMany({
+        where: { productId: id },
+        select: { id: true },
+      })
+    ).map((v) => v.id);
+
+    if (variantIds.length) {
+      await prisma.productVariantSize.deleteMany({ where: { productVariantId: { in: variantIds } } });
+      await prisma.productImage.deleteMany({ where: { productVariantId: { in: variantIds } } });
+      await prisma.productVariant.deleteMany({ where: { id: { in: variantIds } } });
     }
 
-    const vendor = await prisma.vendor.findUnique({
-      where: { userId: user?.id },
-    });
-
-    const isAdmin = user?.role.toString().toUpperCase()   === "ADMIN" || user?.email.startsWith("huzaifeeyunus");
-    if (!isAdmin && (!vendor || vendor.id !== product.vendorId)) {
-      return res.status(403).json({ message: "Not authorized to delete this product." });
-    }
-
-    // 1️⃣ Delete all product images for these variants
-    const variantIds = (await prisma.productVariant.findMany({
-      where: { productId: id },
-      select: { id: true },
-    })).map(v => v.id);
-
-    if (variantIds.length > 0) {
-      await prisma.productImage.deleteMany({
-        where: { productVariantId: { in: variantIds } },
-      });
-    }
-
-    // 2️⃣ Delete variants, reviews, ratings, cartItems, orderItems
-    await prisma.productVariant.deleteMany({ where: { productId: id } });
+    // Delete product-related data
     await prisma.rating.deleteMany({ where: { productId: id } });
     await prisma.review.deleteMany({ where: { productId: id } });
     await prisma.cartItem.deleteMany({ where: { productId: id } });
     await prisma.orderItem.deleteMany({ where: { productId: id } });
-    // 3️⃣ Delete the product itself
+    await prisma.productVideo.deleteMany({ where: { productId: id } });
     await prisma.product.delete({ where: { id } });
 
     res.json({ message: "Product and all related data deleted successfully." });
   } catch (err) {
-    console.error("Error deleting product:", err);
-    res.status(500).json({ message: "Failed to delete product." });
+    console.error("Delete product error:", err);
+    res.status(500).json({ message: "Failed to delete product.", error: err });
   }
 };
 
+// ------------------- DELETE VARIANT -------------------
 export const deleteProductVariant = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = Number(req.params.id);
     const user = req.user;
- 
+
     const variant = await prisma.productVariant.findUnique({
-      where: { id: Number(id) },
-      include: { images: true, product: true },
+      where: { id },
+      include: { product: { include: { vendor: true } } },
     });
+    if (!variant) return res.status(404).json({ message: "Variant not found." });
 
-    if (!variant) {
-      return res.status(404).json({ message: "Variant not found" });
-    }
+    const isAdmin =
+      user?.role?.toString().toUpperCase() === "ADMIN" ||
+      user?.email.startsWith("huzaifeeyunus");
+    const vendor = await prisma.vendor.findUnique({ where: { userId: user?.id } });
 
-    const vendor = await prisma.vendor.findUnique({
-      where: { userId: user?.id },
-    });
+    if (!isAdmin && (!vendor || vendor.id !== variant.product.vendorId))
+      return res.status(403).json({ message: "Not authorized." });
 
-    const isAdmin = user?.role.toString().toUpperCase() === "ADMIN" || user?.email.startsWith("huzaifeeyunus");
-    if (!isAdmin && (!vendor || vendor.id !== variant.product.vendorId)) {
-      return res.status(403).json({ message: "Not authorized to delete this variant." });
-    }
+    // Delete variant sizes and images
+    await prisma.productVariantSize.deleteMany({ where: { productVariantId: variant.id } });
+    await prisma.productImage.deleteMany({ where: { productVariantId: variant.id } });
+    await prisma.productVariant.delete({ where: { id: variant.id } });
 
-    // Delete all images related to this variant
-    await prisma.productImage.deleteMany({
-      where: { productVariantId: variant.id },
-    });
+    await syncProductFromVariants(variant.productId);
 
-    // Delete the variant itself
-    await prisma.productVariant.delete({
-      where: { id: variant.id },
-    });
-
-    res.json({ success: true, message: "Variant deleted successfully" });
-  } catch (error: any) {
-    console.error("Delete variant error:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.json({ message: "Variant deleted successfully." });
+  } catch (err: any) {
+    console.error("Delete variant error:", err);
+    res.status(500).json({ message: "Server error.", error: err.message });
   }
 };
+
+// ------------------- DELETE VARIANT SIZE -------------------
+export const deleteProductVariantSize = async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const user = req.user;
+
+    const size = await prisma.productVariantSize.findUnique({
+      where: { id },
+      include: { variant: { include: { product: { include: { vendor: true } } } } },
+    });
+    if (!size) return res.status(404).json({ message: "Size not found." });
+
+    const isAdmin =
+      user?.role?.toString().toUpperCase() === "ADMIN" ||
+      user?.email.startsWith("huzaifeeyunus");
+    const vendor = await prisma.vendor.findUnique({ where: { userId: user?.id } });
+
+    if (!isAdmin && (!vendor || vendor.id !== size.variant.product.vendorId))
+      return res.status(403).json({ message: "Not authorized." });
+
+    await prisma.productVariantSize.delete({ where: { id } });
+    await syncProductFromVariants(size.variant.productId);
+
+    res.json({ message: "Size deleted successfully." });
+  } catch (err: any) {
+    console.error("Delete size error:", err);
+    res.status(500).json({ message: "Server error.", error: err.message });
+  }
+};
+
+
+ 

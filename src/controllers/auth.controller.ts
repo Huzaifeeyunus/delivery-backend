@@ -199,6 +199,7 @@ export const login = async (req: Request, res: Response) => {
   }
 
    const roles = await prisma.role.findUnique({where: {id: loginuser.roles?.[0].roleId}});
+   
   const token = jwt.sign({ id: loginuser.id, name: loginuser.name, email: loginuser.email, role:  roles}, process.env.JWT_SECRET!, {
     expiresIn: "1h",
   });
