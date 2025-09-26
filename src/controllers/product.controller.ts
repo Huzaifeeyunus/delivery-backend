@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "../lib/prisma";
 import { generateSKU } from "../middlewares/randomnames.middleware";
-import { connect } from "http2";
+//import { connect } from "http2";
 import { StockStatus } from "@prisma/client";
 import { log } from "console";
 
@@ -192,6 +192,12 @@ export const createProductWithImage = async (req: Request, res: Response) => {
         originId: originId ? parseInt(originId) : null,
         tag: tag || null,
         vendorId,
+        // Product-level images
+        images: {
+          create: files
+            .filter(f => f.fieldname.startsWith("productImages_"))
+            .map(f => ({ url: `/uploads/products/images/${f.filename}` })),
+        },
         variants: {
           create: parsedVariants.map((v, idx) => {
             // Map uploaded files to this variant (based on naming convention) 
@@ -221,6 +227,7 @@ export const createProductWithImage = async (req: Request, res: Response) => {
         },
       },
       include: {
+        images: true,  // Include product-level images
         variants: {
           include: {
             sizes: true,
@@ -314,6 +321,7 @@ export const getProducts = async (req: Request, res: Response) => {
       where: whereClause,
       include: {
         vendor: true,
+        images: true,
         videos: true,
         variants: {
           include: { images: true, sizes: true, color: true },
@@ -337,7 +345,8 @@ export const findProduct = async (req: Request, res: Response) => {
         vendor: true,
         category: true,
         subCategory: true,
-        videos: true,
+        images: true,
+        videos: true, 
         variants: {
           include: { images: true, sizes: true, color: true},
         },
@@ -528,360 +537,6 @@ export const updateProductVideos = async (req: Request, res: Response) => {
   }
 };
  
- // ------------------- UPDATE PRODUCT WITH IMAGE/VIDEO/VARIANTS -------------------
-export const XXupdateProductWithVariantsAndImages = async (req: Request, res: Response) => { 
-  const id = Number(req.params.id);
-
-  try {
-    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-    const { productData, variants } = req.body;
- 
-
-    if (!productData) {
-      return res.status(400).json({ message: "Missing productData in request." });
-    }
-
-    const parsedProduct = JSON.parse(productData);
-    const parsedVariants = variants ? JSON.parse(variants) : [];
-
-    const result = await prisma.$transaction(async (tx) => {
-      // 1) Update product base fields
-      const updatedProduct = await tx.product.update({
-        where: { id },
-        data: {
-          name: parsedProduct.name,
-          description: parsedProduct.description,
-          longDescription: parsedProduct.longDescription,
-          slug: parsedProduct.slug,
-          categoryId: parsedProduct.categoryId,
-          subCategoryId: parsedProduct.subCategoryId,
-          brandId: parsedProduct.brandId,
-          materialId: parsedProduct.materialId,
-          originId: parsedProduct.originId,
-          tag: parsedProduct.tag,
-        },
-      });
-
-      // 2) Sync product images
-      const keepImageIds: number[] = parsedProduct.keepImageIds ?? [];
-      await tx.productImage.deleteMany({
-        where: { productId: id, id: { notIn: keepImageIds } },
-      });
-      if (files?.images) {
-        for (const img of files.images) {
-          await tx.productImage.create({
-            data: {
-              productId: id, 
-              url: `/uploads/products/images/${img.filename}`,
-            },
-          });
-        }
-      }
-
-      // 3) Sync product videos
-      const keepVideoIds: number[] = parsedProduct.keepVideoIds ?? [];
-      await tx.productVideo.deleteMany({
-        where: { productId: id, id: { notIn: keepVideoIds } },
-      });
-      if (files?.videos) {
-        for (const vid of files.videos) {
-          await tx.productVideo.create({
-            data: {
-              productId: id,
-              url: `/uploads/products/videos/${vid.filename}`,
-            },
-          });
-        }
-      }
-
-      // 4) Sync variants
-      const keepVariantIds = parsedVariants.map((v: any) => v.id).filter((id: any) => id);
-      await tx.productVariant.deleteMany({
-        where: { productId: id, id: { notIn: keepVariantIds } },
-      });
-
-      for (const variant of parsedVariants) {
-        let variantId = variant.id;
-
-        if (variantId) {
-          // Update existing variant
-          await tx.productVariant.update({
-            where: { id: variantId },
-            data: {
-              colorId: variant.colorId, 
-            },
-          });
-        } else {
-          // Create new variant
-          const newVariant = await tx.productVariant.create({
-            data: {
-              productId: id,
-              colorId: variant.colorId, 
-            },
-          });
-          variantId = newVariant.id;
-        }
- 
-        // --- Variant Images ---
-        const keepVariantImageIds: number[] = variant.keepImageIds ?? [];
-        await tx.productImage.deleteMany({
-          where: { productVariantId: variantId, id: { notIn: keepVariantImageIds } },
-        });
-          /* 
-        const variantImageFiles = Array.isArray(files) 
-                                  ? files.filter((f,vi) => f.fieldname === `variant_${vi}_images`)
-                                  : [];  */
-  
-        const variantImageFiles = Array.isArray(files) 
-                                  ? files.filter((f,fi) => f.fieldname.toString().includes(`variant_${fi}_images`))
-                                  : []; 
-                                  
-                                  
-                                   
-         log("variantImageFiles::: ",variantImageFiles);
-        if (variantImageFiles.length > 0) {  
-          for (const img of variantImageFiles) {  
-            await tx.productImage.create({
-              data: {
-                productId: id,
-                productVariantId: variantId,
-                url: `/uploads/products/images/${img.filename}`,
-              },
-            });
-          }
-        }
- 
-        // --- Variant Sizes ---
-        const keepSizeIds = variant.sizes.map((s: any) => s.id).filter((id: any) => id);
-        await tx.productVariantSize.deleteMany({
-          where: { productVariantId: variantId, id: { notIn: keepSizeIds } },
-        });
-
-        for (const size of variant.sizes) {
-          if (size.id) {
-            await tx.productVariantSize.update({
-              where: { id: size.id },
-              data: {
-                sizeId: size.sizeId,
-                price: size.price,
-                stock: size.stock,
-              },
-            });
-          } else {
-            await tx.productVariantSize.create({
-              data: {
-                productVariantId: variantId,
-                sizeId: size.sizeId,
-                price: size.price,
-                stock: size.stock,
-              },
-            });
-          }
-        }
-      }
-
-
-      // 6) Return updated product
-      return tx.product.findUnique({
-        where: { id },
-        include: {
-          images: true,
-          videos: true,
-          variants: {
-            include: {
-              images: true,
-              sizes: { include: { size: true } },
-              color: true,
-            },
-          },
-          category: true,
-          brand: true,
-        },
-      });
-    });
-
-      // 5) Recalculate stock/price aggregates
-      await syncProductFromVariants(id);
-    res.json(result);
-  } catch (err) {
-    console.error("Update product error:", err);
-    res.status(500).json({ message: "Failed to update product.", error: err });
-  }
-};
-
-// ------------------- UPDATE PRODUCT WITH IMAGE/VIDEO/VARIANTS -------------------
-export const NNupdateProductWithVariantsAndImages = async (req: Request, res: Response) => { 
-  const id = Number(req.params.id);
-
-  try {
-    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-    const { productData, variants } = req.body;
-
-    if (!productData) {
-      return res.status(400).json({ message: "Missing productData in request." });
-    }
- console.log("BODY", req.body);
-console.log("FILES", files);
-    const parsedProduct = JSON.parse(productData);
-    const parsedVariants = variants ? JSON.parse(variants) : [];
-
-    const result = await prisma.$transaction(async (tx) => {
-      // 1) Update product base fields
-      const updatedProduct = await tx.product.update({
-        where: { id },
-        data: {
-          name: parsedProduct.name,
-          description: parsedProduct.description,
-          longDescription: parsedProduct.longDescription,
-          slug: parsedProduct.slug,
-          categoryId: parsedProduct.categoryId,
-          subCategoryId: parsedProduct.subCategoryId,
-          brandId: parsedProduct.brandId,
-          materialId: parsedProduct.materialId,
-          originId: parsedProduct.originId,
-          tag: parsedProduct.tag,
-        },
-      });
-
-      // 2) Sync product images (only delete if keepImageIds explicitly sent)
-      if (parsedProduct.keepImageIds) {
-        const keepImageIds: number[] = parsedProduct.keepImageIds;
-        await tx.productImage.deleteMany({
-          where: { productId: id, id: { notIn: keepImageIds } },
-        });
-      }
-      if (files?.images) {
-        for (const img of files.images) {
-          await tx.productImage.create({
-            data: {
-              productId: id, 
-              url: `/uploads/products/images/${img.filename}`,
-            },
-          });
-        }
-      }
-
-      // 3) Sync product videos (same treatment as images)
-      if (parsedProduct.keepVideoIds) {
-        const keepVideoIds: number[] = parsedProduct.keepVideoIds;
-        await tx.productVideo.deleteMany({
-          where: { productId: id, id: { notIn: keepVideoIds } },
-        });
-      }
-      if (files?.videos) {
-        for (const vid of files.videos) {
-          await tx.productVideo.create({
-            data: {
-              productId: id,
-              url: `/uploads/products/videos/${vid.filename}`,
-            },
-          });
-        }
-      }
-
-      // 4) Sync variants
-      const keepVariantIds = parsedVariants.map((v: any) => v.id).filter((id: any) => id);
-      await tx.productVariant.deleteMany({
-        where: { productId: id, id: { notIn: keepVariantIds } },
-      });
-
-      for (const variant of parsedVariants) {
-        let variantId = variant.id;
-
-        if (variantId) {
-          await tx.productVariant.update({
-            where: { id: variantId },
-            data: { colorId: variant.colorId },
-          });
-        } else {
-          const newVariant = await tx.productVariant.create({
-            data: { productId: id, colorId: variant.colorId },
-          });
-          variantId = newVariant.id;
-        }
-
-        // --- Variant Images ---
-        if (variant.keepImageIds) {
-          const keepVariantImageIds: number[] = variant.keepImageIds;
-          await tx.productImage.deleteMany({
-            where: { productVariantId: variantId, id: { notIn: keepVariantImageIds } },
-          });
-        }
-
-        const variantImageFiles = Array.isArray(files) 
-          ? files.filter((f: any, i) => f.fieldname?.includes(`variant_${i}_images`))
-          : [];
-
-        if (variantImageFiles.length > 0) {
-          for (const img of variantImageFiles) {
-            await tx.productImage.create({
-              data: {
-                productId: id,
-                productVariantId: variantId,
-                url: `/uploads/products/images/${img.filename}`,
-              },
-            });
-          }
-        }
-
-        // --- Variant Sizes ---
-        const keepSizeIds = variant.sizes.map((s: any) => s.id).filter((id: any) => id);
-        await tx.productVariantSize.deleteMany({
-          where: { productVariantId: variantId, id: { notIn: keepSizeIds } },
-        });
-
-        for (const size of variant.sizes) {
-          if (size.id) {
-            await tx.productVariantSize.update({
-              where: { id: size.id },
-              data: {
-                sizeId: size.sizeId,
-                price: size.price,
-                stock: size.stock,
-              },
-            });
-          } else {
-            await tx.productVariantSize.create({
-              data: {
-                productVariantId: variantId,
-                sizeId: size.sizeId,
-                price: size.price,
-                stock: size.stock,
-              },
-            });
-          }
-        }
-      }
-
-      // 5) Return updated product
-      return tx.product.findUnique({
-        where: { id },
-        include: {
-          images: true,
-          videos: true,
-          variants: {
-            include: {
-              images: true,
-              sizes: { include: { size: true } },
-              color: true,
-            },
-          },
-          category: true,
-          brand: true,
-        },
-      });
-    });
-
-    // 6) Recalculate stock/price aggregates
-    await syncProductFromVariants(id);
-
-    res.json(result);
-  } catch (err) {
-    console.error("Update product error:", err);
-    res.status(500).json({ message: "Failed to update product.", error: err });
-  }
-};
-
 
 // ------------------- UPDATE PRODUCT WITH IMAGE/VIDEO/VARIANTS ------------------- 
 export const  updateProductWithVariantsAndImages = async (req: Request, res: Response) => {
