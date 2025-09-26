@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repository
+      # 1️⃣ Checkout backend repo
       - name: Checkout repository
         uses: actions/checkout@v3
 
@@ -23,26 +23,29 @@ jobs:
       # 3️⃣ Install backend dependencies
       - name: Install backend dependencies
         run: npm ci
-        working-directory: ./delivery-backend
 
       # 4️⃣ Generate Prisma client
       - name: Generate Prisma client
         run: npx prisma generate
-        working-directory: ./delivery-backend
 
       # 5️⃣ Run Prisma migrations
       - name: Run Prisma migrations
         run: npx prisma migrate deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        working-directory: ./delivery-backend
 
       # 6️⃣ Build backend
       - name: Build backend
         run: npm run build
-        working-directory: ./delivery-backend
 
-      # 7️⃣ Deploy to DigitalOcean droplet via SSH
+      # 7️⃣ Build frontend locally in workflow
+      - name: Build frontend
+        run: |
+          cd ../esdelivery-app   # adjust path if needed
+          npm ci
+          npm run build
+
+      # 8️⃣ Deploy to DigitalOcean droplet via SSH
       - name: Deploy to DigitalOcean
         uses: appleboy/ssh-action@v0.1.7
         with:
@@ -51,13 +54,23 @@ jobs:
           key: ${{ secrets.DROPLET_SSH_KEY }}
           port: 22
           script: |
-            # Backend deployment
+            # ----- Backend -----
             cd /var/www/delivery-backend
             git pull origin main
             npm ci
             npm run build
             pm2 restart all
 
-            # Frontend deployment (if manually copied)
-            cd /var/www/esdelivery-app
-            pm2 restart all
+            # ----- Frontend -----
+            mkdir -p /var/www/html
+            rm -rf /var/www/html/*
+          # Copy frontend dist folder from workflow to droplet
+      - name: Upload frontend dist
+        uses: appleboy/scp-action@v0.1.0
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          port: 22
+          source: "../esdelivery-app/dist/*"
+          target: "/var/www/html/"
