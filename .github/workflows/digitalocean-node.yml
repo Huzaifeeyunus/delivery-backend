@@ -1,4 +1,4 @@
-name: DigitalOcean Backend Deploy
+name: DigitalOcean Node.js Backend Deploy
 
 on:
   push:
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repository
+      # 1️⃣ Checkout repo
       - name: Checkout repository
         uses: actions/checkout@v3
 
@@ -20,18 +20,18 @@ jobs:
         with:
           node-version: 20
 
-      # 3️⃣ Install dependencies
+      # 3️⃣ Install backend dependencies
       - name: Install dependencies
         run: npm ci
-        working-directory: ./delivery-backend
+        working-directory: ./   # root of backend repo
 
-      # 4️⃣ Build TypeScript
+      # 4️⃣ Build backend
       - name: Build backend
         run: npm run build
-        working-directory: ./delivery-backend
+        working-directory: ./   # root of backend repo
 
       # 5️⃣ Deploy to DigitalOcean
-      - name: Deploy backend
+      - name: Deploy to DigitalOcean
         uses: appleboy/ssh-action@v0.1.7
         with:
           host: ${{ secrets.DROPLET_HOST }}
