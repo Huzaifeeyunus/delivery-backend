@@ -29,10 +29,10 @@ jobs:
         run: npx prisma generate
 
       # 5️⃣ Run Prisma migrations
-      - name: Run Prisma migrations
-        run: npx prisma migrate deploy
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      #- name: Run Prisma migrations
+      #  run: npx prisma migrate deploy
+      #  env:
+      #    DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
       # 6️⃣ Build backend
       - name: Build backend
