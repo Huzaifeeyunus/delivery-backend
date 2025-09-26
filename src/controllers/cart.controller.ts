@@ -1,57 +1,56 @@
 import { Request, Response } from "express";
 import prisma from "../lib/prisma";  
 import { log } from "console"; 
+import { each } from "chart.js/dist/helpers/helpers.core";
 //import { calculateShippingCost } from "../utils/shipping";
 //import { calculateDistanceKm, calculateShippingFee } from "../utils/shipping";
 //import haversine from "haversine-distance";
 const haversine = require("haversine-distance");
 
 
-// Add item to cart (with variant support)
+// Add item to cart (with variant support)  
+// ✅ Add to Cart
 export const addToCart = async (req: Request, res: Response) => {
   try {
-    const userId = Number(req.user?.id); // authenticated user
+    const userId = Number(req.user?.id);
     const { productId, variantId, sizeId, quantity } = req.body;
 
     if (!productId || !quantity) {
       return res.status(400).json({ message: "Product and quantity are required" });
     }
 
-    // ✅ Check product exists
+    // Fetch product
     const product = await prisma.product.findUnique({
       where: { id: productId },
-      select: {
-        id: true,
-        name: true,
-        variants: {
-          where: { id: variantId || undefined },
-          select: { id: true, sizes: true },
-        },
-      },
+      include: { variants: { include: { sizes: true } } },
     });
-
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    // ✅ If variant is provided, validate it
-    let variant = null;
+    let price = product.price ?? 0;
+
+    // Variant + size logic
     if (variantId) {
-      variant = await prisma.productVariant.findUnique({
+      const variant = await prisma.productVariant.findUnique({
         where: { id: variantId },
         include: { sizes: true },
       });
-
       if (!variant) return res.status(404).json({ message: "Variant not found" });
 
-      // ✅ If size is required, validate it
-      if (sizeId) {
-        const sizeExists = variant.sizes.some((s) => s.id === sizeId);
-        if (!sizeExists) {
-          return res.status(400).json({ message: "Selected size not available for this variant" });
+      if (variant.sizes.length > 0) {
+        // ✅ product has sizes → require sizeId
+        if (!sizeId) {
+          return res.status(400).json({ message: "Size selection is required" });
         }
+        const sizeObj = variant.sizes.find((s) => s.id === sizeId);
+        if (!sizeObj) return res.status(400).json({ message: "Size not available" });
+        price = sizeObj.price;
+      } else {
+        // ✅ no sizes → fallback to variant price
+        price = product.price ?? price;
       }
     }
 
-    // ✅ Get or create user cart
+    // Get or create cart
     let cart = await prisma.cart.findFirst({
       where: { userId },
       include: { items: true },
@@ -64,7 +63,7 @@ export const addToCart = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ Check if same product + variant + size already exists
+    // Check if item already exists
     const existingItem = await prisma.cartItem.findFirst({
       where: {
         cartId: cart.id,
@@ -75,7 +74,6 @@ export const addToCart = async (req: Request, res: Response) => {
     });
 
     if (existingItem) {
-      // Update quantity
       const updatedItem = await prisma.cartItem.update({
         where: { id: existingItem.id },
         data: { quantity: existingItem.quantity + quantity },
@@ -83,7 +81,7 @@ export const addToCart = async (req: Request, res: Response) => {
       return res.json({ message: "Cart updated", item: updatedItem });
     }
 
-    // ✅ Add new cart item
+    // Add new item
     const newItem = await prisma.cartItem.create({
       data: {
         cartId: cart.id,
@@ -91,7 +89,7 @@ export const addToCart = async (req: Request, res: Response) => {
         variantId: variantId || null,
         sizeId: sizeId || null,
         quantity,
-        price: variant ? Number(variant.sizes?.map(s => s.price)) : 0,
+        price,
       },
     });
 
@@ -103,7 +101,8 @@ export const addToCart = async (req: Request, res: Response) => {
 };
 
 
-// ✅ updateCartQuantity with stock validation
+
+// ✅ Update Cart Quantity
 export const updateCartQuantity = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -151,6 +150,7 @@ export const updateCartQuantity = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 
 
@@ -279,9 +279,9 @@ export const getAllCart = async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
     if (!user) return res.status(401).json({ error: "Unauthorized" });
-
+ 
     // --- 1. Handle ADMIN fetching all carts ---
-    if (user?.role?.toString().toLowerCase() === "admin") {
+    if (user?.role.name?.toString().toLowerCase() === "admin") {
       const carts = await prisma.cart.findMany({
         include: {
           user: true,
@@ -290,7 +290,7 @@ export const getAllCart = async (req: Request, res: Response) => {
       });
       return res.json({ carts });
     }
-
+ 
     // --- 2. Normal user fetching own cart ---
     const userId = Number(user.id);
     const cart = await prisma.cart.findFirst({
@@ -299,7 +299,7 @@ export const getAllCart = async (req: Request, res: Response) => {
         items: { include: { product: true, variant: true } },
       },
     });
-
+ 
     if (!cart || cart.items.length === 0) {
       return res.status(200).json({ message: "Cart is empty", cart: null });
     }
@@ -309,6 +309,7 @@ export const getAllCart = async (req: Request, res: Response) => {
       where: { userId, isDefault: true },
     });
 
+log("defaultAddress: ", defaultAddress)
     let shippingCost = 0;
     const warnings: string[] = [];
     if (!defaultAddress) {
@@ -324,6 +325,7 @@ export const getAllCart = async (req: Request, res: Response) => {
       shippingCost = Math.max(10, distanceKm * 2); // Example: GHS 2/km, min 10
     }
 
+log("defaultAddress: ", defaultAddress)
     // --- 4. Adjust stock + calculate totals (ALWAYS use variant) ---
     let subtotal = 0;
     const adjustedItems = await Promise.all(
@@ -368,9 +370,11 @@ export const getAllCart = async (req: Request, res: Response) => {
       })
     );
 
+log("adjustedItems: ", adjustedItems)
     const finalItems = adjustedItems.filter((i: any) => i !== null);
     const total = subtotal + shippingCost;
 
+log("finalItems: ", finalItems)
     return res.json({
       cart: { ...cart, items: finalItems },
       address: defaultAddress ?? null,
@@ -392,6 +396,7 @@ export const getItemCart = async (req: Request, res: Response) => {
     const user = (req as any).user;
     const itemid = (req as any).params; 
 
+log("user: ", user)
 
     if (!user) return res.status(401).json({ error: "Unauthorized" });
 
@@ -414,16 +419,19 @@ export const getItemCart = async (req: Request, res: Response) => {
         items: { include: { product: true, variant: true } },
       },
     });
-
+log("userId: ", userId)
+log("cart: ", cart)
     if (!cart || cart.items.length === 0) {
       return res.status(200).json({ message: "Cart is empty", cart: null });
     }
 
+log("cart: ", cart)
     // --- 3. Find default address ---
     const defaultAddress = await prisma.address.findFirst({
       where: { userId, isDefault: true },
     });
 
+log("defaultAddress: ", defaultAddress)
     if (!defaultAddress) {
       return res.status(400).json({
         message: "No default address found. Please set one before checkout.",
@@ -432,12 +440,14 @@ export const getItemCart = async (req: Request, res: Response) => {
       });
     }
 
+log("defaultAddress: ", defaultAddress)
     // --- 4. Shipping fee using haversine ---
     const userLocation = {
       latitude: defaultAddress.latitude!,
       longitude: defaultAddress.longitude!,
     };
 
+log("userLocation: ", userLocation)
     const distanceMeters = haversine(SHOP_LOCATION, userLocation);
     const distanceKm = distanceMeters / 1000;
     const shippingCost = Math.max(10, distanceKm * 2); // Example: GHS 2/km, min 10
@@ -481,12 +491,13 @@ export const getItemCart = async (req: Request, res: Response) => {
     const finalItems = adjustedItems.filter((i: any) => i !== null);
     const total = subtotal + shippingCost;
 
+log("finalItems: ", finalItems)
     return res.json({
       cart: { ...cart, items: finalItems },
       address: defaultAddress,
       totals: { subtotal, shipping: shippingCost, total },
       warnings,
-    });
+    }); 
   } catch (err) {
     console.error("getCart error:", err);
     res.status(500).json({ error: "Failed to fetch cart" });
@@ -505,7 +516,7 @@ export const updateCartItem = async (req: Request, res: Response) => {
 
   return res.json({ message: "Quantity updated" });
 };
-
+ 
 
  // src/controllers/cart.controller.ts 
 export const updateCartItemQty = async (req: Request, res: Response) => {

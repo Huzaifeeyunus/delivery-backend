@@ -365,7 +365,8 @@ export const findProduct = async (req: Request, res: Response) => {
 
  
  
-// ------------------- UPDATE PRODUCT -------------------
+// ------------------- UPDATE PRODUCT ------------------- 
+
 export const updateProduct = async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
@@ -380,6 +381,11 @@ export const updateProduct = async (req: Request, res: Response) => {
       materialId,
       originId,
       tag,
+      price,
+      discountPrice,
+      stock,
+      isAvailable,
+      imagesToKeep, // array of URLs to keep
     } = req.body;
 
     const user = req.user;
@@ -387,7 +393,7 @@ export const updateProduct = async (req: Request, res: Response) => {
     // Find product
     const product = await prisma.product.findUnique({
       where: { id },
-      include: { vendor: true },
+      include: { vendor: true, images: true },
     });
     if (!product) return res.status(404).json({ message: "Product not found" });
 
@@ -404,7 +410,7 @@ export const updateProduct = async (req: Request, res: Response) => {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    // ✅ Update ONLY product fields
+    // ---------------- Update product fields ----------------
     const updatedProduct = await prisma.product.update({
       where: { id },
       data: {
@@ -414,23 +420,65 @@ export const updateProduct = async (req: Request, res: Response) => {
         slug,
         categoryId: parseInt(categoryId),
         subCategoryId: subCategoryId ? parseInt(subCategoryId) : null,
-        brandId: brandId ? parseInt(brandId) : null,
-        materialId: materialId ? parseInt(materialId) : null,
-        originId: originId ? parseInt(originId) : null,
+        brandId: parseInt(brandId) ? parseInt(brandId) : null,
+        materialId: parseInt(materialId) ? parseInt(materialId) : null,
+        originId: parseInt(originId) ? parseInt(originId) : null,
         tag,
+        price: Number(price) ?? undefined,
+        discountPrice: Number(discountPrice) ?? undefined,
+        stock: Number(stock) ?? undefined,
+        available: Boolean(isAvailable) ?? undefined,
       },
       include: {
         variants: { include: { images: true, sizes: true, color: true } },
         videos: true,
+        images: true,
       },
     });
 
-    res.json(updatedProduct);
+    const productId = updatedProduct.id;
+
+    // ---------------- Handle images ----------------
+    // 1. Delete images removed on frontend
+    if (imagesToKeep && Array.isArray(imagesToKeep)) {
+      await prisma.productImage.deleteMany({
+        where: {
+          productId,
+          url: { notIn: imagesToKeep },
+        },
+      });
+    }
+
+    // 2. Add newly uploaded images
+    const files = req.files as Express.Multer.File[] | undefined;
+    if (files && files.length > 0) {
+      for (const file of files) {
+        await prisma.productImage.create({
+          data: {
+            productId,
+            url: `/uploads/products/images/${file.filename}`,
+          },
+        });
+      }
+    }
+
+    // Return updated product
+    const finalProduct = await prisma.product.findUnique({
+      where: { id: productId },
+      include: {
+        variants: { include: { images: true, sizes: true, color: true } },
+        images: true,
+        videos: true,
+      },
+    });
+
+    res.json(finalProduct);
   } catch (err) {
     console.error("Update product error:", err);
     res.status(500).json({ message: "Failed to update product.", error: err });
   }
 };
+
  
 // ------------------- UPDATE PRODUCT IMAGES (SYNC) -------------------
 export const updateProductImages = async (req: Request, res: Response) => {
@@ -934,7 +982,7 @@ export const deleteProductVariantSize = async (req: Request, res: Response) => {
     if (!size) return res.status(404).json({ message: "Size not found." });
 
     const isAdmin =
-      user?.role?.toString().toUpperCase() === "ADMIN" ||
+      user?.role?.name.toString().toUpperCase() === "ADMIN" ||
       user?.email.startsWith("huzaifeeyunus");
     const vendor = await prisma.vendor.findUnique({ where: { userId: user?.id } });
 

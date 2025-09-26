@@ -34,7 +34,7 @@ router.get("/subcategory/:id", findProductBySubCategory);
 router.get("/images/:id", findProductImage);
 
 // ✅ Product updating
-router.put("/:id", protect, updateProduct);
+router.put("/:id", protect, uploader.any(), updateProduct);
 router.put("/with-variants-image/:id", protect, uploader.any(), updateProductWithVariantsAndImages);
 router.put("/image/:id", protect, uploader.any(), updateProductImages);
 router.put("/video/:id", protect, uploader.any(), updateProductVideos);
