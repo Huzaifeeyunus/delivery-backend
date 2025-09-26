@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout backend repository
+      # 1️⃣ Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v3
 
@@ -42,14 +42,7 @@ jobs:
         run: npm run build
         working-directory: ./delivery-backend
 
-      # 7️⃣ Build frontend
-      - name: Build frontend
-        run: |
-          npm ci
-          npm run build
-        working-directory: ./  # frontend files are in the main repo root
-
-      # 8️⃣ Deploy to DigitalOcean droplet via SSH
+      # 7️⃣ Deploy to DigitalOcean droplet via SSH
       - name: Deploy to DigitalOcean
         uses: appleboy/ssh-action@v0.1.7
         with:
@@ -58,14 +51,13 @@ jobs:
           key: ${{ secrets.DROPLET_SSH_KEY }}
           port: 22
           script: |
-            # --- Backend ---
+            # Backend deployment
             cd /var/www/delivery-backend
             git pull origin main
             npm ci
             npm run build
             pm2 restart all
 
-            # --- Frontend ---
-            cd /var/www/html
-            rm -rf *           # remove old files
-            cp -r /root/dist/* .  # copy new frontend build from droplet's dist folder
+            # Frontend deployment (if manually copied)
+            cd /var/www/esdelivery-app
+            pm2 restart all
