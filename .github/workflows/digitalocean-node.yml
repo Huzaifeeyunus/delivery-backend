@@ -10,16 +10,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout backend repo
-      - name: Checkout backend repository
+      # 1️⃣ Checkout backend repository
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2️⃣ Setup Node.js for backend
-      - name: Setup Node.js (backend)
+      # 2️⃣ Setup Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20
-        working-directory: ./delivery-backend
 
       # 3️⃣ Install backend dependencies
       - name: Install backend dependencies
@@ -34,35 +33,24 @@ jobs:
       # 5️⃣ Run Prisma migrations
       - name: Run Prisma migrations
         run: npx prisma migrate deploy
-        working-directory: ./delivery-backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        working-directory: ./delivery-backend
 
       # 6️⃣ Build backend
       - name: Build backend
         run: npm run build
         working-directory: ./delivery-backend
 
-      # 7️⃣ Setup Node.js for frontend (local build)
-      - name: Setup Node.js (frontend)
-        uses: actions/setup-node@v3
-        with:
-          node-version: 20
-
-      # 8️⃣ Install frontend dependencies
-      - name: Install frontend dependencies
-        run: |
-          cd ./esdelivery-app
-          npm ci
-
-      # 9️⃣ Build frontend
+      # 7️⃣ Build frontend
       - name: Build frontend
         run: |
-          cd ./esdelivery-app
-          npm run build   # produces /build folder
+          npm ci
+          npm run build
+        working-directory: ./  # frontend files are in the main repo root
 
-      # 🔟 Deploy backend via SSH (Git pull + PM2 restart)
-      - name: Deploy backend to DigitalOcean
+      # 8️⃣ Deploy to DigitalOcean droplet via SSH
+      - name: Deploy to DigitalOcean
         uses: appleboy/ssh-action@v0.1.7
         with:
           host: ${{ secrets.DROPLET_HOST }}
@@ -70,19 +58,14 @@ jobs:
           key: ${{ secrets.DROPLET_SSH_KEY }}
           port: 22
           script: |
+            # --- Backend ---
             cd /var/www/delivery-backend
             git pull origin main
             npm ci
             npm run build
             pm2 restart all
 
-      # 1️⃣1️⃣ Deploy frontend build via rsync
-      - name: Upload frontend build to DigitalOcean
-        uses: burnett01/rsync-deployments@v4
-        with:
-          switches: -avz --delete
-          path: ./esdelivery-app/build/
-          remote_path: /var/www/esdelivery-app/
-          remote_host: ${{ secrets.DROPLET_HOST }}
-          remote_user: ${{ secrets.DROPLET_USER }}
-          remote_key: ${{ secrets.DROPLET_SSH_KEY }}
+            # --- Frontend ---
+            cd /var/www/html
+            rm -rf *           # remove old files
+            cp -r /root/dist/* .  # copy new frontend build from droplet's dist folder
