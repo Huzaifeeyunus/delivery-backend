@@ -1,10 +1,5 @@
 import { Request, Response } from "express";
-import prisma from "../lib/prisma";  
-import { log } from "console"; 
-import { each } from "chart.js/dist/helpers/helpers.core";
-//import { calculateShippingCost } from "../utils/shipping";
-//import { calculateDistanceKm, calculateShippingFee } from "../utils/shipping";
-//import haversine from "haversine-distance";
+import prisma from "../lib/prisma";     
 const haversine = require("haversine-distance");
 
 
@@ -308,8 +303,7 @@ export const getAllCart = async (req: Request, res: Response) => {
     const defaultAddress = await prisma.address.findFirst({
       where: { userId, isDefault: true },
     });
-
-log("defaultAddress: ", defaultAddress)
+ 
     let shippingCost = 0;
     const warnings: string[] = [];
     if (!defaultAddress) {
@@ -324,8 +318,7 @@ log("defaultAddress: ", defaultAddress)
       const distanceKm = distanceMeters / 1000;
       shippingCost = Math.max(10, distanceKm * 2); // Example: GHS 2/km, min 10
     }
-
-log("defaultAddress: ", defaultAddress)
+ 
     // --- 4. Adjust stock + calculate totals (ALWAYS use variant) ---
     let subtotal = 0;
     const adjustedItems = await Promise.all(
@@ -369,12 +362,10 @@ log("defaultAddress: ", defaultAddress)
         };
       })
     );
-
-log("adjustedItems: ", adjustedItems)
+ 
     const finalItems = adjustedItems.filter((i: any) => i !== null);
     const total = subtotal + shippingCost;
-
-log("finalItems: ", finalItems)
+ 
     return res.json({
       cart: { ...cart, items: finalItems },
       address: defaultAddress ?? null,
@@ -395,8 +386,7 @@ export const getItemCart = async (req: Request, res: Response) => {
   try {
     const user = (req as any).user;
     const itemid = (req as any).params; 
-
-log("user: ", user)
+ 
 
     if (!user) return res.status(401).json({ error: "Unauthorized" });
 
@@ -418,20 +408,18 @@ log("user: ", user)
       include: {
         items: { include: { product: true, variant: true } },
       },
-    });
-log("userId: ", userId)
-log("cart: ", cart)
+    }); 
+
     if (!cart || cart.items.length === 0) {
       return res.status(200).json({ message: "Cart is empty", cart: null });
     }
-
-log("cart: ", cart)
+ 
     // --- 3. Find default address ---
     const defaultAddress = await prisma.address.findFirst({
       where: { userId, isDefault: true },
     });
+ 
 
-log("defaultAddress: ", defaultAddress)
     if (!defaultAddress) {
       return res.status(400).json({
         message: "No default address found. Please set one before checkout.",
@@ -439,15 +427,13 @@ log("defaultAddress: ", defaultAddress)
         cart,
       });
     }
-
-log("defaultAddress: ", defaultAddress)
+ 
     // --- 4. Shipping fee using haversine ---
     const userLocation = {
       latitude: defaultAddress.latitude!,
       longitude: defaultAddress.longitude!,
     };
-
-log("userLocation: ", userLocation)
+ 
     const distanceMeters = haversine(SHOP_LOCATION, userLocation);
     const distanceKm = distanceMeters / 1000;
     const shippingCost = Math.max(10, distanceKm * 2); // Example: GHS 2/km, min 10
@@ -490,8 +476,7 @@ log("userLocation: ", userLocation)
 
     const finalItems = adjustedItems.filter((i: any) => i !== null);
     const total = subtotal + shippingCost;
-
-log("finalItems: ", finalItems)
+ 
     return res.json({
       cart: { ...cart, items: finalItems },
       address: defaultAddress,

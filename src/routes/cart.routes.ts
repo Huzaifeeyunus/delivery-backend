@@ -9,8 +9,7 @@ import {
   removeCartItem,
   clearCart,
 } from "../controllers/cart.controller";
-import { protect } from "../controllers/auth.controller";
-import { log } from "console";
+import { protect } from "../controllers/auth.controller"; 
  
 const router = express.Router();
 router.post("/", protect, addToCart); 
