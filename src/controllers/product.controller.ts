@@ -13,18 +13,21 @@ interface MulterFiles {
 
 interface VariantForm {
   id?: number | 0;
+  productId: number | 0;
   colorId: number;
   sizeId: number;
   price?: number;
   stock?: number;
   available?: boolean;
   discountPrice?: number;
+  stockStatus?: number;
   sizes?: ProductVariantSizeForm[];
   images?: ProductImageForm[];
 }
-
+ 
 interface ProductVariantSizeForm {
   id?: number | 0;
+  productVariantId: number | 0;
   sizeId: number;
   SKU?: string;
   price: number;
@@ -90,6 +93,11 @@ export const createProduct = async (req: Request, res: Response) => {
           data: {
             productId: product.id,
             colorId: v.colorId,
+            SKU: v.SKU ?? `GEN-${product.id}-${v.colorId}`,
+            price: parseFloat(v.price.toString()),
+            stock: parseInt(v.stock.toString()),
+            discountPrice: v.discountPrice ?? null,
+            available: v.available ?? true,
           },
         });
 
@@ -198,14 +206,24 @@ export const createProductWithImage = async (req: Request, res: Response) => {
             .filter(f => f.fieldname.startsWith("productImages_"))
             .map(f => ({ url: `/uploads/products/images/${f.filename}` })),
         },
+        // Variants
         variants: {
           create: parsedVariants.map((v, idx) => {
             // Map uploaded files to this variant (based on naming convention) 
-            const variantFiles = files.filter(f => f.fieldname === `variantImages_${idx}`); 
-            console.log("variantFiles: ", variantFiles)
-            console.log("files: ", files)
+            const variantFiles = files.filter(f => f.fieldname === `variantImages_${idx}`);  
+            const hasSizes = v.sizes && v.sizes.length > 0;
+
             return {
               colorId: parseInt(v.colorId),
+              // ✅ Variant-level fallback fields
+              price: !hasSizes ? parseFloat(v.price) || parseFloat(price) || 0 : 0,
+              stock: !hasSizes ? parseInt(v.stock) || parseInt(stock) || 0 : 0,
+              discountPrice: !hasSizes ? (v.discountPrice ? parseFloat(v.discountPrice) : null) : null,
+              available: !hasSizes ? (v.available ?? true) : false,
+              stockStatus: !hasSizes
+                ? (v.stock && parseInt(v.stock) > 0 ? StockStatus.IN_STOCK : StockStatus.OUT_OF_STOCK)
+                : StockStatus.OUT_OF_STOCK,
+              // ✅ Variant-level fallback fields
               sizes: {
                 create: v.sizes?.map((s: any) => ({
                   sizeId: parseInt(s.sizeId),
@@ -310,7 +328,7 @@ export const findProductImage = async (req: Request, res: Response) => {
 };
 
 // ------------------- GET PRODUCTS -------------------
-export const getProducts = async (req: Request, res: Response) => {
+export const getProductss = async (req: Request, res: Response) => {
   try {
     const { categoryId, subCategoryId } = req.query;
     const whereClause: any = {};
@@ -328,6 +346,7 @@ export const getProducts = async (req: Request, res: Response) => {
         },
       },
     });
+ 
 
     res.json(products);
   } catch (err) {
@@ -337,7 +356,7 @@ export const getProducts = async (req: Request, res: Response) => {
 };
 
 // ------------------- FIND PRODUCT -------------------
-export const findProduct = async (req: Request, res: Response) => {
+export const findProductt = async (req: Request, res: Response) => {
   try {
     const product = await prisma.product.findUnique({
       where: { id: parseInt(req.params.id) },
@@ -361,7 +380,112 @@ export const findProduct = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Failed to fetch product." });
   }
 };
+ 
 
+ // ------------------- GET PRODUCTS -------------------
+export const getProducts = async (req: Request, res: Response) => {
+  try {
+    const { categoryId, subCategoryId } = req.query;
+    const whereClause: any = {};
+    if (categoryId) whereClause.categoryId = Number(categoryId);
+    if (subCategoryId) whereClause.subCategoryId = Number(subCategoryId);
+
+    let products = await prisma.product.findMany({
+      where: whereClause,
+      include: {
+        vendor: true,
+        images: true,
+        videos: true,
+        variants: {
+          include: { images: true, sizes: true, color: true },
+        },
+      },
+    });
+
+    // apply fallback logic
+    products = products.map((product) => {
+      if (!product.variants || product.variants.length === 0) {
+        // ✅ Product-level details are valid
+        return product;
+      }
+
+      // If variants exist
+      product.price = 0;
+      product.stock = 0;
+      product.discountPrice = null;
+
+      product.variants = product.variants.map((variant) => {
+        if (!variant.sizes || variant.sizes.length === 0) {
+          // ✅ Variant-level details are valid
+          return variant;
+        }
+
+        // Sizes exist → variant carries nothing
+        variant.price = 0;
+        variant.stock = 0;
+        variant.discountPrice = 0;
+        return variant;
+      });
+
+      return product;
+    });
+
+    res.json(products);
+  } catch (err) {
+    console.error("Error fetching products:", err);
+    res.status(500).json({ message: "Failed to fetch products." });
+  }
+};
+
+// ------------------- FIND PRODUCT -------------------
+export const findProduct = async (req: Request, res: Response) => {
+  try {
+    let product = await prisma.product.findUnique({
+      where: { id: parseInt(req.params.id) },
+      include: {
+        vendor: true,
+        category: true,
+        subCategory: true,
+        images: true,
+        videos: true,
+        variants: {
+          include: { images: true, sizes: true, color: true },
+        },
+      },
+    });
+
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    // apply fallback logic
+    if (!product.variants || product.variants.length === 0) {
+      // ✅ Product-level details are valid
+      return res.json(product);
+    }
+
+    // If variants exist
+    product.price = 0;
+    product.stock = 0;
+    product.discountPrice = null;
+
+    product.variants = product.variants.map((variant) => {
+      if (!variant.sizes || variant.sizes.length === 0) {
+        // ✅ Variant-level details are valid
+        return variant;
+      }
+
+      // Sizes exist → variant carries nothing
+      variant.price = 0;
+      variant.stock = 0;
+      variant.discountPrice = null;
+      return variant;
+    });
+
+    res.json(product);
+  } catch (err) {
+    console.error("Error fetching product:", err);
+    res.status(500).json({ message: "Failed to fetch product." });
+  }
+};
 
  
  
@@ -741,6 +865,11 @@ export const  updateProductWithVariantsAndImages = async (req: Request, res: Res
             where: { id: variantId },
             data: {
               colorId: variant.colorId,
+              // ✅ If no sizes, allow storing price/stock at variant level
+              price: (variant.sizes?.length ?? 0) === 0 ? variant.price : 0,
+              stock: (variant.sizes?.length ?? 0) === 0 ? variant.stock : 0,
+              discountPrice: (variant.sizes?.length ?? 0) === 0 ? variant.discountPrice : null,
+              available: (variant.sizes?.length ?? 0) === 0 ? variant.available : false,
             },
           });
         } else {
@@ -749,6 +878,11 @@ export const  updateProductWithVariantsAndImages = async (req: Request, res: Res
             data: {
               productId: id,
               colorId: variant.colorId,
+              // ✅ If no sizes, allow storing price/stock at variant level
+              price: (variant.sizes?.length ?? 0) === 0 ? variant.price : 0,
+              stock: (variant.sizes?.length ?? 0) === 0 ? variant.stock : 0,
+              discountPrice: (variant.sizes?.length ?? 0) === 0 ? variant.discountPrice : null,
+              available: (variant.sizes?.length ?? 0) === 0 ? variant.available : false,
             },
           });
           variantId = newVariant.id;
@@ -848,7 +982,7 @@ export const  updateProductWithVariantsAndImages = async (req: Request, res: Res
 
 
 // ------------------- SYNC PRODUCT FUNCTION -------------------
-async function syncProductFromVariants(productId: number) {
+async function syncProductFromVariantss(productId: number) {
   const sizes = await prisma.productVariantSize.findMany({
     where: { variant: { productId } },
     select: { price: true, discountPrice: true, stock: true, available: true },
@@ -882,6 +1016,74 @@ async function syncProductFromVariants(productId: number) {
       stock: totalStock,
       available: anyAvailable,
       stockStatus,
+    },
+  });
+}
+// ------------------- SYNC PRODUCT FUNCTION ------------------- 
+async function syncProductFromVariants(productId: number) {
+  // 1) Gather all sizes for this product
+  const sizes = await prisma.productVariantSize.findMany({
+    where: { variant: { productId } },
+    select: { price: true, discountPrice: true, stock: true, available: true },
+  });
+
+  if (sizes.length > 0) {
+    // ✅ Case 1: sizes exist → sync from sizes
+    const minPrice = Math.min(...sizes.map((s) => s.price));
+    const minDiscount = Math.min(...sizes.map((s) => s.discountPrice ?? Number.MAX_VALUE));
+    const totalStock = sizes.reduce((sum, s) => sum + s.stock, 0);
+    const anyAvailable = sizes.some((s) => s.available);
+    const stockStatus = totalStock > 0 ? StockStatus.IN_STOCK : StockStatus.OUT_OF_STOCK;
+
+    await prisma.product.update({
+      where: { id: productId },
+      data: {
+        price: minPrice,
+        discountPrice: minDiscount === Number.MAX_VALUE ? null : minDiscount,
+        stock: totalStock,
+        available: anyAvailable,
+        stockStatus,
+      },
+    });
+    return;
+  }
+
+  // 2) If no sizes, check for variants
+  const variants = await prisma.productVariant.findMany({
+    where: { productId },
+    select: { price: true, discountPrice: true, stock: true, available: true },
+  });
+
+  if (variants.length > 0) {
+    // ✅ Case 2: variants exist, but no sizes → sync from variants
+    const minPrice = Math.min(...variants.map((v) => v.price ?? 0));
+    const minDiscount = Math.min(...variants.map((v) => v.discountPrice ?? Number.MAX_VALUE));
+    const totalStock = variants.reduce((sum, v) => sum + (v.stock ?? 0), 0);
+    const anyAvailable = variants.some((v) => v.available ?? false);
+    const stockStatus = totalStock > 0 ? StockStatus.IN_STOCK : StockStatus.OUT_OF_STOCK;
+
+    await prisma.product.update({
+      where: { id: productId },
+      data: {
+        price: minPrice,
+        discountPrice: minDiscount === Number.MAX_VALUE ? null : minDiscount,
+        stock: totalStock,
+        available: anyAvailable,
+        stockStatus,
+      },
+    });
+    return;
+  }
+
+  // 3) If no sizes and no variants → product is empty/fallback to 0
+  await prisma.product.update({
+    where: { id: productId },
+    data: {
+      price: 0,
+      discountPrice: null,
+      stock: 0,
+      available: false,
+      stockStatus: StockStatus.OUT_OF_STOCK,
     },
   });
 }

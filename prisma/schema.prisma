@@ -156,6 +156,16 @@ model ProductVariant {
   color     Color                @relation(fields: [colorId], references: [id])
   images    ProductImage[]
   sizes     ProductVariantSize[]
+
+  
+  // 👇 new fallback fields
+  SKU           String?
+  stock         Int     @default(0)
+  price         Float     @default(0)
+  discountPrice Float?
+  available     Boolean     @default(true)
+  stockStatus   StockStatus @default(IN_STOCK)
+  
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
   product   Product              @relation(fields: [productId], references: [id])
