@@ -97,8 +97,8 @@ export const getAllVendor = async (_req: Request, res: Response) => {
 
 // -------------------- GET VENDOR BY ID --------------------
 export const findVendor = async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-
+  let id = Number(req.params.id);
+  if(!Number(id)){ id = Number(req.user?.id); } 
   try {
     const vendor = await prisma.vendor.findUnique({
       where: { id },

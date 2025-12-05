@@ -44,7 +44,7 @@ export const getCustomerProfile = async (req: AuthRequest, res: Response): Promi
       });
       return;
     }
-
+ 
     res.status(200).json({
       success: true,
       data: customer,
