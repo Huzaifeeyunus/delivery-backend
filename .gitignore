@@ -17,3 +17,8 @@ yarn-error.log*
 
 # Optional: VSCode settings
 .vscode/
+
+echo ".env.production" >> .gitignore
+
+git rm --cached .env.production
+.env.production
