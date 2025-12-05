@@ -8,7 +8,7 @@ import {
         updateOrderStatus, 
         getOrderDetails,
         getCustomerOrders,updateDeliveryStatus,updatePaymentStatus,
-        markOrderAsPaid, handlePaymentFailure, refundOrder } 
+        markOrderAsPaid, handlePaymentFailure, refundOrder,updateVendorOrderStatus } 
         from "../controllers/order.controller";   
 import { protect } from "../controllers/auth.controller";
  
@@ -19,7 +19,9 @@ router.get("/:orderId", getOrderDetails);
 router.get("/all/admins/admin", getAllOrders); 
 router.get("/user/:userId", getUserOrders);
 router.get("/me/current/customer/:userId", getCustomerOrders);
-router.get("/vendors/:vendorId/vendor", getVendorOrders);
+
+router.get("/vendor/orders", getVendorOrders); 
+router.patch('/:orderId/vendor-status', protect, updateVendorOrderStatus);
 
 router.post("/payments/pay/initiate",  protect, initiatePayment);
 router.post("/placeOrder",  protect, placeOrder);

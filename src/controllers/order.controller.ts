@@ -14,7 +14,6 @@ export const initiatePayment = async (req: Request, res: Response) => {
     if(!cartId) return res.status(400).json({ error: "No Order Found" });
     
 
-
     // 1. Generate transaction reference
     const reference = `TX-${Date.now()}-${userId}`;
 
@@ -43,22 +42,40 @@ export const initiatePayment = async (req: Request, res: Response) => {
 
  // src/controllers/order.controller.ts
  export const placeOrder = async (req: Request, res: Response) => {
+  let order = null;
   try {
     const userId = Number(req.user?.id);
-    const { addressId, shippingFee, transactionId } = req.body;
+    const { addressId, shippingFee, paymentReference } = req.body;
 
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
     // 1. Verify transaction
     const transaction = await prisma.transaction.findFirst({
-      where: { reference: transactionId },
+      where: { reference: paymentReference },
     });
 
     if (!transaction || transaction.status !== "success") {
       return res.status(400).json({ error: "Payment not confirmed" });
     }
 
-    // 2. Fetch user's cart
+    // 2. Check if an order already exists for this transaction
+    const existingOrder = await prisma.order.findFirst({
+      where: {
+        transactions: {
+          some: { id: transaction.id }
+        }
+      }
+    });
+ 
+    if (existingOrder) { 
+      return res.status(200).json({ 
+        success: true, 
+        order: existingOrder, 
+        message: "Order already processed"
+      });
+    }
+ 
+    // 3. Fetch user's cart
     const cart = await prisma.cart.findFirst({
       where: { userId },
       include: { items: { include: { product: true, variant: true } } },
@@ -66,16 +83,17 @@ export const initiatePayment = async (req: Request, res: Response) => {
 
     if (!cart || cart.items.length === 0) {
       return res.status(400).json({ error: "Cart is empty" });
-    } 
-    // 3. Calculate totals
+    }
+
+    // 4. Calculate totals
     const subtotal = cart.items.reduce(
       (sum: any, item: any) => sum + (item.variant?.price ?? item.product.price) * item.quantity,
       0
     );
-    const total = subtotal + (shippingFee ?? 0);
-
-    // 4. Create the order safely
-    const order = await prisma.order.create({
+    const total = subtotal + (shippingFee ?? 0); 
+ 
+    // 5. Create the order safely
+    order = await prisma.order.create({
       data: {
         status: "pending",
         subtotal,
@@ -108,24 +126,29 @@ export const initiatePayment = async (req: Request, res: Response) => {
       },
       include: { items: true, payment: true, transactions: true },
     });
-
-    // 5. Link transaction back to order
-    await prisma.transaction.update({
-      where: { id: transaction.id },
-      data: { orderId: order.id },
-    });
-
-    // 6. Clear cart items
-    await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
+ 
+    // 6. Link transaction back to order
+      await prisma.transaction.update({
+        where: { id: transaction.id },
+        data: { orderId: order.id },
+      });
+    
+    // 7. Clear cart items ONLY AFTER order is successfully created
+      await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
  
     res.json({ success: true, order });
   } catch (err) {
     console.error("Checkout error:", err);
-    res.status(500).json({ error: "Checkout failed" });
+    
+    // DON'T clear cart if order creation failed!
+    // The cart items should remain so user can retry
+    
+    res.status(500).json({ 
+      error: "Checkout failed. Please try again. Your cart items have been preserved.",
+      preserveCart: true 
+    });
   }
 };
-
-
 
  
 
@@ -265,42 +288,119 @@ export const getUserOrders = async (req: Request, res: Response) => {
 };
 
 
-// Get all orders for a specific vendor
-export const getVendorOrders = async (req: Request, res: Response) => {
-  const vendorId = parseInt(req.params.vendorId);
-
-  if (isNaN(vendorId)) {
-    return res.status(400).json({ error: "Invalid vendorId" });
-  }
-
+// Get all orders for a specific vendor  
+ export const getVendorOrders = async (req: Request, res: Response): Promise<void> => {
   try {
-    const orders = await prisma.order.findMany({
-      where: { vendorId },
+    const vendorId = req.user?.id;
+ 
+    // Get all items for this vendor first
+    const vendorItems = await prisma.orderItem.findMany({
+      where: {
+        product: {
+          vendorId: vendorId
+        }
+      },
       include: {
-        items: {
-          include: {
-            product: true,
-          },
+        product: {
+          select: {
+            id: true,
+            name: true,
+            price: true
+          }
         },
-        customer: true,
-        payment: true,
-        delivery: true,
-        vendor: true,
-        transactions: true,
-      },
-      orderBy: {
-        placedAt: "desc",
-      },
+        order: {
+          include: {
+            customer: {
+              select: {
+                id: true,
+                name: true,
+                phone: true
+              }
+            },
+            delivery: true,
+            payment: true
+          }
+        }
+      }
     });
 
-    return res.status(200).json(orders);
-  } catch (error) {
-    console.error("❌ Failed to fetch vendor orders:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    // Group items by order
+    const ordersMap = new Map();
+    
+    vendorItems.forEach(item => {
+      const orderId = item.orderId;
+      
+      if (!ordersMap.has(orderId)) {
+        ordersMap.set(orderId, {
+          ...item.order,
+          items: [],
+          vendorTotal: 0
+        });
+      }
+      
+      const order = ordersMap.get(orderId);
+      order.items.push({
+        id: item.id,
+        product: item.product,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.quantity * item.unitPrice
+      });
+      order.vendorTotal += item.quantity * item.unitPrice;
+    });
+
+    const orders = Array.from(ordersMap.values())
+      .sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
+
+    res.json(orders);
+  } catch (error: any) {
+    console.error('Get vendor orders error:', error);
+    res.status(500).json({ error: 'Failed to fetch vendor orders' });
   }
 };
 
+export const updateVendorOrderStatus = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { orderId } = req.params;
+    const { status } = req.body;
+    const vendorId = req.user?.id;
  
+    // Verify vendor has items in this order
+    const order = await prisma.order.findFirst({
+      where: {
+        id: Number(orderId),
+        items: {
+          some: {
+            product: {
+              vendorId: vendorId
+            }
+          }
+        }
+      }
+    });
+
+    if (!order) {
+      res.status(404).json({ error: 'Order not found or not accessible' });
+      return;
+    }
+
+    // Update order status
+    const updatedOrder = await prisma.order.update({
+      where: { id: Number(orderId) },
+      data: { status }
+    });
+
+    res.json({
+      success: true,
+      message: 'Order status updated successfully',
+      order: updatedOrder
+    });
+
+  } catch (error: any) {
+    console.error('Update order status error:', error);
+    res.status(500).json({ error: 'Failed to update order status' });
+  }
+};
 
 
 
@@ -308,10 +408,10 @@ const COMMISSION_RATE = parseFloat(process.env.PLATFORM_COMMISSION_RATE || "0.1"
 export const updateOrderStatus = async (req: Request, res: Response) => {
   const orderId = parseInt(req.params.id);
   const { status } = req.body;
-
+ 
   try {
     const order = await prisma.order.findUnique({ where: { id: orderId } });
-
+ 
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
     }
@@ -465,3 +565,27 @@ export const refundOrder = async (req: Request, res: Response) => {
 };
 
 
+// In your orders router 
+
+export const getOrderById = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { orderId } = req.params;
+    const order = await prisma.order.findUnique({where: {id: Number(orderId)}});
+ /*    order()
+      .populate('customer', 'name phone email')
+      .populate('items.product', 'name')
+      .populate('items.variant.color', 'name')
+      .populate('items.size.size', 'name'); */
+
+    if (!order) {
+      res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+
+    res.json(order);
+  } catch (error: any) {
+    console.error('Get order error:', error);
+    res.status(500).json({ error: 'Failed to fetch order' });
+  }
+};
+ 

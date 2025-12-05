@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import prisma from "../lib/prisma";
 import fs from "fs";
 import path from "path";
+import { createSubAccount } from "../services/paystack.service";
+import { json } from "stream/consumers";
 
 // Helper: get uploaded image URLs
 const getUploadedImages = (files: Express.Multer.File[] | undefined): string[] => {
@@ -18,7 +20,7 @@ const getUploadedVideos = (files: Express.Multer.File[] | undefined): string[] =
 // -------------------- CREATE VENDOR --------------------
 export const createVendor = async (req: Request, res: Response) => {
   const { shopName, shopPhone, shopLocation, shopLongitude, shopLatitude,
-    shopAddress, shopEmail, shopWebsite, shopOwner, isActive } = req.body;
+    shopAddress, shopEmail, shopWebsite, shopOwner, momoNetwork, momoNumber, isActive } = req.body;
   const userId = Number(req.user?.id);
 
   if (!shopName) return res.status(400).json({ message: "Shop name is required." });
@@ -30,6 +32,16 @@ export const createVendor = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "You already have a vendor." });
     }
 
+        // 1. Create Paystack subaccount
+    const sub:any = await createSubAccount({
+      businessName: shopName,
+      bankCode: momoNetwork,   // "MTN", "VOD", "ATL"
+      accountNumber: momoNumber,
+    });
+
+    const subaccountCode = sub?.data.subaccount_code || "";
+
+    
     // Get uploaded images and videos
     const imageUrls = getUploadedImages(req.files as Express.Multer.File[]);
     const videoUrls = getUploadedVideos(req.files as Express.Multer.File[]);
@@ -48,6 +60,7 @@ export const createVendor = async (req: Request, res: Response) => {
         shopEmail,
         shopWebsite,
         shopOwner,
+        subaccountCode,
         isActive: newIsActive,
         images: {
           create: imageUrls.map(url => ({ url })),
@@ -105,7 +118,7 @@ export const findVendor = async (req: Request, res: Response) => {
 export const updateVendor = async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   const { shopName, shopPhone, shopLocation, shopLongitude, shopLatitude,
-    shopAddress, shopEmail, shopWebsite, shopOwner, isActive } = req.body;
+    shopAddress, shopEmail, shopWebsite, shopOwner, momoNetwork, momoNumber, isActive } = req.body;
 
   try {
     // Find existing vendor with images/videos
@@ -114,6 +127,34 @@ export const updateVendor = async (req: Request, res: Response) => {
       include: { images: true, videos: true },
     });
     if (!existingVendor) return res.status(404).json({ message: "Vendor not found." });
+
+
+
+    try {
+      
+          const existingsubaccountCode = JSON.parse(existingVendor.subaccountCode || "{}"); 
+          const existingmomoNetwork = (existingsubaccountCode.momoNetwork as string) || "";
+          const existingmomoNumber = (existingsubaccountCode.momoNumber as string) || ""; 
+ 
+        // 1. Create Paystack subaccount
+        if(!existingmomoNetwork || !existingmomoNumber || existingmomoNetwork !== momoNetwork || existingmomoNumber !== momoNumber){          
+            const sub:any = await createSubAccount({
+            businessName: shopName,
+            bankCode: momoNetwork,   // "MTN", "VOD", "ATL"
+            accountNumber: momoNumber,
+        });
+
+            const subaccountCode = sub?.data.subaccount_code || "";
+             await prisma.vendor.update({
+              where: { id },
+              data: { 
+                subaccountCode, 
+              }
+            });
+        }
+    } catch (error) {
+      
+    }
 
     // Get newly uploaded images/videos
     const newImageUrls = getUploadedImages(req.files as Express.Multer.File[]);
@@ -131,7 +172,7 @@ export const updateVendor = async (req: Request, res: Response) => {
         shopAddress,
         shopEmail,
         shopWebsite,
-        shopOwner,
+        shopOwner, 
         isActive: Boolean(isActive),
         images: {
           create: newImageUrls.map(url => ({ url })),

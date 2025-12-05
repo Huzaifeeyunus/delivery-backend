@@ -62,6 +62,21 @@ const app = express();
 const PORT = Number(process.env.PORT) || 4000;
 const BASE_URL = process.env.VITE_BASE_URL || `http://localhost:${PORT}`;
 
+// Add this middleware BEFORE your routes
+// app.use((req, res, next) => {
+//   // Log all requests that might affect cart items
+//   if (req.method === 'DELETE' || req.url.includes('cart') || req.url.includes('clear')) {
+//     console.log('🚨 POTENTIAL CART DELETION REQUEST:', {
+//       method: req.method,
+//       url: req.url,
+//       body: req.body,
+//       timestamp: new Date().toISOString()
+//     });
+//   }
+//   next();
+// });
+
+
 // Static uploads folder
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 // Serve static files from public

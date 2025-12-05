@@ -10,7 +10,7 @@ import {
   clearCart,
 } from "../controllers/cart.controller";
 import { protect } from "../controllers/auth.controller"; 
- 
+  
 const router = express.Router();
 router.post("/", protect, addToCart); 
 router.get("/", protect, getAllCart);
@@ -21,7 +21,7 @@ router.put("/update/:userId", protect, updateCartItem);
 router.patch("/me/item/:itemId", protect, updateCartItemQty);
 
 router.delete("/:cartId", protect, removeCartItem);
-router.delete("/:userId", protect, clearCart);
+router.delete("/me/:userId", protect, clearCart);
 
 export default router;
     
