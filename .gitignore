@@ -6,6 +6,7 @@ dist/
 
 # Environment variables
 .env
+.env.production 
 
 # Prisma generated client
 /src/generated/prisma
@@ -18,7 +19,4 @@ yarn-error.log*
 # Optional: VSCode settings
 .vscode/
 
-echo ".env.production" >> .gitignore
-
-git rm --cached .env.production
-.env.production
+ 
