@@ -280,6 +280,7 @@ export const initiatePayment = async (req: Request, res: Response) => {
         method: "paystack",
         amount: totalAmount,
         status: "initiated",
+        platformFee: Number(((PLATFORM_PERCENTAGE / 100) * totalAmount).toFixed(2)),
         rawData: JSON.stringify({
           paystackResponse: paystackData,
           cartId,
